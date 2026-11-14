@@ -1,0 +1,648 @@
+/* ============================================================
+ * 时间块规划师 样式
+* ============================================================ */
+
+.tbp-root {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  overflow: hidden;
+}
+
+/* ---------- 顶部栏 ---------- */
+
+.tbp-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px 6px;
+  flex-wrap: wrap;
+  border-bottom: 1px solid var(--background-modifier-border);
+}
+
+.tbp-nav {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.tbp-mode-toggle {
+  display: flex;
+  margin-left: 6px;
+  border: 1px solid var(--background-modifier-border);
+  border-radius: 7px;
+  overflow: hidden;
+}
+
+.tbp-mode-btn {
+  padding: 3px 12px;
+  font-size: 11px;
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  color: var(--text-muted);
+  line-height: 1.4;
+}
+
+.tbp-mode-btn.active {
+  background: var(--interactive-accent);
+  color: var(--text-on-accent);
+  font-weight: 600;
+}
+
+.tbp-date-label {
+  font-weight: 600;
+  font-size: 14px;
+  margin: 0 4px;
+  white-space: nowrap;
+}
+
+.tbp-icon-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  padding: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--text-muted);
+  cursor: pointer;
+}
+
+.tbp-icon-btn:hover {
+  background: var(--background-modifier-hover);
+  color: var(--text-normal);
+}
+
+.tbp-today-btn {
+  border-radius: 6px;
+  padding: 3px 10px;
+  font-size: 12px;
+  background: var(--background-modifier-hover);
+  color: var(--text-normal);
+  border: 1px solid var(--background-modifier-border);
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.tbp-today-btn:hover {
+  background: var(--background-modifier-active-hover);
+}
+
+.tbp-primary-btn {
+  border-radius: 6px;
+  padding: 4px 12px;
+  font-size: 12px;
+  font-weight: 600;
+  background: var(--interactive-accent);
+  color: var(--text-on-accent);
+  border: none;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.tbp-primary-btn:hover {
+  filter: brightness(1.08);
+}
+
+.tbp-stats {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+  align-items: center;
+}
+
+.tbp-chip {
+  padding: 2px 10px;
+  border-radius: 12px;
+  font-size: 11px;
+  color: var(--text-muted);
+  background: var(--background-modifier-hover);
+  white-space: nowrap;
+}
+
+.tbp-actions {
+  display: flex;
+  gap: 6px;
+  margin-left: auto;
+  align-items: center;
+}
+
+/* ---------- 主体 ---------- */
+
+.tbp-body {
+  flex: 1;
+  display: flex;
+  min-height: 0;
+}
+
+/* ---------- 目标面板 ---------- */
+
+.tbp-goals {
+  width: 270px;
+  flex: none;
+  overflow-y: auto;
+  border-right: 1px solid var(--background-modifier-border);
+  padding: 10px 12px;
+}
+
+.tbp-goals.tbp-hidden {
+  display: none;
+}
+
+.tbp-goals-title {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-weight: 700;
+  font-size: 13px;
+  margin-bottom: 10px;
+}
+
+.tbp-goals-title button {
+  font-size: 11px;
+  padding: 2px 8px;
+  border-radius: 5px;
+  background: var(--interactive-accent);
+  color: var(--text-on-accent);
+  border: none;
+  cursor: pointer;
+}
+
+.tbp-goals-empty {
+  font-size: 12px;
+  color: var(--text-muted);
+  line-height: 1.7;
+  padding: 12px 8px;
+}
+
+.tbp-goal-card {
+  position: relative;
+  border: 1px solid var(--background-modifier-border);
+  border-radius: 10px;
+  padding: 8px 10px;
+  margin-bottom: 10px;
+  background: var(--background-primary);
+  transition: border-color 0.15s;
+}
+
+.tbp-goal-card:hover {
+  border-color: var(--interactive-accent);
+}
+
+.tbp-goal-card.tbp-goal-done {
+  opacity: 0.6;
+}
+
+.tbp-goal-card.tbp-goal-paused {
+  opacity: 0.75;
+}
+
+.tbp-goal-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 6px;
+}
+
+.tbp-goal-name {
+  font-weight: 600;
+  font-size: 13px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.tbp-goal-due {
+  font-size: 10px;
+  color: var(--text-muted);
+  white-space: nowrap;
+}
+
+.tbp-goal-due.tbp-due-soon {
+  color: #e05656;
+  font-weight: 600;
+}
+
+.tbp-progress {
+  height: 6px;
+  border-radius: 3px;
+  background: var(--background-modifier-hover);
+  margin: 6px 0 4px;
+  overflow: hidden;
+}
+
+.tbp-progress-fill {
+  height: 100%;
+  border-radius: 3px;
+  background: var(--interactive-accent);
+  transition: width 0.25s ease;
+}
+
+.tbp-goal-meta {
+  font-size: 10.5px;
+  color: var(--text-muted);
+  line-height: 1.5;
+}
+
+.tbp-goal-status {
+  position: absolute;
+  top: 6px;
+  right: 8px;
+  font-size: 10px;
+  padding: 1px 6px;
+  border-radius: 8px;
+  background: var(--background-modifier-hover);
+  color: var(--text-muted);
+}
+
+.tbp-goal-btns {
+  display: flex;
+  gap: 6px;
+  margin-top: 8px;
+}
+
+.tbp-goal-plan-hint {
+  margin-top: 6px;
+  font-size: 10.5px;
+  color: var(--text-muted);
+  border-top: 1px dashed var(--background-modifier-border);
+  padding-top: 5px;
+}
+
+/* ---------- 时间轴 ---------- */
+
+.tbp-timeline-wrap {
+  flex: 1;
+  display: flex;
+  overflow-y: auto;
+  overflow-x: hidden;
+  min-width: 0;
+  position: relative;
+}
+
+/* ---------- 周视图 ---------- */
+
+.tbp-week {
+  display: flex;
+  flex: 1;
+  min-width: 0;
+}
+
+.tbp-day-col {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  border-left: 1px solid var(--background-modifier-border);
+}
+
+/* 刻度列顶部的占位，与日列表头等高，保证刻度与时间轴对齐 */
+.tbp-head-spacer {
+  height: 36px;
+  flex: none;
+}
+
+.tbp-day-head {
+  height: 36px;
+  flex: none;
+  box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  position: sticky;
+  top: 0;
+  z-index: 6;
+  background: var(--background-primary);
+  cursor: pointer;
+  user-select: none;
+  border-bottom: 1px solid var(--background-modifier-border);
+}
+
+.tbp-day-head:hover {
+  background: var(--background-modifier-hover);
+}
+
+.tbp-day-head .tbp-day-dow {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-muted);
+}
+
+.tbp-day-head .tbp-day-date {
+  font-size: 10.5px;
+  color: var(--text-faint);
+}
+
+.tbp-day-head.is-today .tbp-day-dow,
+.tbp-day-head.is-today .tbp-day-date {
+  color: var(--interactive-accent);
+  font-weight: 700;
+}
+
+.tbp-day-head.is-weekend .tbp-day-dow {
+  color: var(--text-faint);
+}
+
+.tbp-week-lane {
+  cursor: crosshair;
+}
+
+/* 紧凑时间块（周视图） */
+
+.tbp-block.tbp-compact {
+  padding: 1px 3px 1px 6px;
+  border-left-width: 3px;
+  border-radius: 6px;
+  left: 2px;
+  right: 2px;
+}
+
+.tbp-block.tbp-compact .tbp-block-title {
+  font-size: 10.5px;
+  padding-right: 16px;
+}
+
+.tbp-block.tbp-compact .tbp-block-time {
+  font-size: 9px;
+  display: none;
+}
+
+.tbp-block.tbp-compact .tbp-block-note,
+.tbp-block.tbp-compact .tbp-goal-chip,
+.tbp-block.tbp-compact .tbp-resize {
+  display: none;
+}
+
+.tbp-block.tbp-compact .tbp-check {
+  width: 12px;
+  height: 12px;
+  top: 2px;
+  right: 2px;
+  border-width: 1px;
+}
+
+.tbp-block.tbp-compact.tbp-done .tbp-check::after {
+  font-size: 8px;
+}
+
+/* 时间块足够高时才显示时间行（由 JS 加 tbp-tall 类控制） */
+.tbp-block.tbp-compact.tbp-tall .tbp-block-time {
+  display: block;
+}
+
+.tbp-hours {
+  width: 52px;
+  flex: none;
+  padding-top: 0;
+  border-right: 1px solid var(--background-modifier-border);
+  position: sticky;
+  left: 0;
+  z-index: 2;
+  background: var(--background-primary);
+}
+
+.tbp-hour-label {
+  font-size: 10.5px;
+  color: var(--text-faint);
+  text-align: right;
+  padding-right: 8px;
+  position: relative;
+  top: -6px;
+  box-sizing: border-box;
+}
+
+.tbp-lane {
+  position: relative;
+  flex: 1;
+  min-width: 300px;
+  cursor: crosshair;
+  touch-action: none;
+}
+
+.tbp-blocks {
+  position: absolute;
+  inset: 0;
+}
+
+/* ---------- 时间块 ---------- */
+
+.tbp-block {
+  position: absolute;
+  left: 10px;
+  right: 10px;
+  border-radius: 10px;
+  padding: 4px 8px 2px 10px;
+  font-size: 12px;
+  cursor: grab;
+  overflow: hidden;
+  user-select: none;
+  border-left: 4px solid;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.06);
+  touch-action: none;
+  z-index: 3;
+}
+
+.tbp-block:hover {
+  filter: brightness(1.04);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.12);
+}
+
+.tbp-block.tbp-dragging {
+  cursor: grabbing;
+  opacity: 0.85;
+  z-index: 10;
+  box-shadow: 0 6px 16px rgba(0, 0, 0, 0.2);
+}
+
+.tbp-block.tbp-done {
+  opacity: 0.55;
+}
+
+.tbp-block.tbp-done .tbp-block-title {
+  text-decoration: line-through;
+}
+
+.tbp-block-title {
+  font-weight: 600;
+  font-size: 12px;
+  line-height: 1.4;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  padding-right: 22px;
+}
+
+.tbp-block-time {
+  font-size: 10.5px;
+  opacity: 0.75;
+  line-height: 1.4;
+}
+
+.tbp-goal-chip {
+  display: inline-block;
+  font-size: 9.5px;
+  border-radius: 8px;
+  padding: 0 6px;
+  background: rgba(127, 127, 127, 0.15);
+  margin-top: 2px;
+  line-height: 1.6;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.tbp-block-note {
+  font-size: 10px;
+  opacity: 0.7;
+  line-height: 1.4;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.tbp-check {
+  position: absolute;
+  top: 5px;
+  right: 6px;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  border: 1.5px solid var(--text-muted);
+  cursor: pointer;
+  box-sizing: border-box;
+  z-index: 2;
+}
+
+.tbp-check:hover {
+  border-color: var(--interactive-accent);
+  box-shadow: 0 0 0 2px var(--background-modifier-hover);
+}
+
+.tbp-block.tbp-done .tbp-check {
+  background: var(--interactive-accent);
+  border-color: var(--interactive-accent);
+}
+
+.tbp-block.tbp-done .tbp-check::after {
+  content: "✓";
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 10px;
+  color: var(--text-on-accent);
+}
+
+.tbp-resize {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  height: 9px;
+  cursor: ns-resize;
+  z-index: 4;
+}
+
+.tbp-resize::after {
+  content: "";
+  position: absolute;
+  bottom: 2px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 26px;
+  height: 3px;
+  border-radius: 2px;
+  background: rgba(127, 127, 127, 0.4);
+}
+
+/* 分类配色（多彩、轻玻璃感） */
+
+.tbp-cat-focus {
+  background: rgba(124, 108, 240, 0.16);
+  border-left-color: #7c6cf0;
+}
+
+.tbp-cat-study {
+  background: rgba(56, 184, 165, 0.16);
+  border-left-color: #38b8a5;
+}
+
+.tbp-cat-sport {
+  background: rgba(242, 153, 74, 0.18);
+  border-left-color: #f2994a;
+}
+
+.tbp-cat-life {
+  background: rgba(106, 168, 79, 0.18);
+  border-left-color: #6aa84f;
+}
+
+.tbp-cat-rest {
+  background: rgba(176, 140, 192, 0.16);
+  border-left-color: #b08cc0;
+}
+
+.tbp-cat-misc {
+  background: rgba(138, 138, 138, 0.15);
+  border-left-color: #8a8a8a;
+}
+
+/* ---------- 当前时刻线 ---------- */
+
+.tbp-now {
+  position: absolute;
+  left: 0;
+  right: 0;
+  height: 2px;
+  background: #e05656;
+  z-index: 5;
+  pointer-events: none;
+}
+
+.tbp-now::before {
+  content: "";
+  position: absolute;
+  left: -4px;
+  top: -3px;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #e05656;
+}
+
+/* ---------- 拖拽预览 ---------- */
+
+.tbp-preview {
+  position: absolute;
+  left: 10px;
+  right: 10px;
+  border: 2px dashed var(--interactive-accent);
+  border-radius: 10px;
+  background: var(--background-modifier-hover);
+  opacity: 0.7;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 11px;
+  color: var(--text-muted);
+  pointer-events: none;
+  z-index: 8;
+  box-sizing: border-box;
+}
+
+/* ---------- 弹窗 ---------- */
+
+.tbp-modal .tbp-modal-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 18px;
+}
+
+.tbp-modal .tbp-spacer {
+  flex: 1;
+}
