@@ -802,7 +802,9 @@ class TimeblockView extends ItemView {
     this.dayLaneEl = this.buildLane(wrap);
     this.dayBlocksEl = this.dayLaneEl.createDiv("tbp-blocks");
     this.dayNowEl = this.dayLaneEl.createDiv("tbp-now");
-    this.bindLaneCreateEvents(this.dayLaneEl, this.date);
+    // 用 getter 实时取当前日期：时间轴骨架只在整渲染时重建一次，
+    // 而 changeDay 只重绘时间块；若在此处固定捕获日期，切换日期后圈选仍会写入旧日期
+    this.bindLaneCreateEvents(this.dayLaneEl, () => this.date);
 
     this.renderBlocks();
     this.updateNowLine();
@@ -836,7 +838,7 @@ class TimeblockView extends ItemView {
       const blocksEl = lane.createDiv("tbp-blocks");
       const nowEl = lane.createDiv("tbp-now");
 
-      this.bindLaneCreateEvents(lane, date);
+      this.bindLaneCreateEvents(lane, () => date);
 
       this.weekCols.push({ date, laneEl: lane, blocksEl, nowEl });
     }
@@ -1109,8 +1111,8 @@ class TimeblockView extends ItemView {
     }
   }
 
-  /** 空白处拖拽圈选创建时间块（日/周视图通用） */
-  private bindLaneCreateEvents(lane: HTMLElement, date: any) {
+  /** 空白处拖拽圈选创建时间块（日/周视图通用）。getDate 实时返回该 lane 对应的日期。 */
+  private bindLaneCreateEvents(lane: HTMLElement, getDate: () => any) {
     lane.addEventListener("pointerdown", (e) => {
       const t = e.target as HTMLElement;
       if (t !== lane && t !== lane.querySelector(":scope > .tbp-blocks")) {
@@ -1118,7 +1120,7 @@ class TimeblockView extends ItemView {
         const blocksEl = lane.querySelector(":scope > .tbp-blocks");
         if (t !== blocksEl) return;
       }
-      this.beginCreateDrag(e, lane, date);
+      this.beginCreateDrag(e, lane, getDate());
     });
   }
 
