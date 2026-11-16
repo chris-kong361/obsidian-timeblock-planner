@@ -646,3 +646,284 @@
 .tbp-modal .tbp-spacer {
   flex: 1;
 }
+
+/* ---------- 目标拆解：编辑弹窗 ---------- */
+
+.tbp-goal-modal {
+  max-height: 82vh;
+  overflow-y: auto;
+}
+
+.tbp-steps-editor {
+  margin-top: 16px;
+  border-top: 1px solid var(--background-modifier-border);
+  padding-top: 12px;
+}
+
+.tbp-steps-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 8px;
+}
+
+.tbp-steps-title {
+  font-weight: 600;
+  font-size: 13px;
+}
+
+.tbp-steps-count {
+  font-size: 11px;
+  color: var(--text-muted);
+  background: var(--background-modifier-hover);
+  border-radius: 8px;
+  padding: 1px 8px;
+}
+
+.tbp-steps-count.is-all-done {
+  color: var(--text-on-accent);
+  background: var(--interactive-accent);
+}
+
+.tbp-steps-list {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  max-height: 260px;
+  overflow-y: auto;
+  padding-right: 2px;
+}
+
+.tbp-steps-empty {
+  font-size: 11.5px;
+  color: var(--text-faint);
+  line-height: 1.6;
+  padding: 6px 2px;
+}
+
+.tbp-step-row {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  border-radius: 6px;
+  padding: 2px 3px;
+}
+
+.tbp-step-row:hover {
+  background: var(--background-modifier-hover);
+}
+
+.tbp-step-check {
+  flex: 0 0 auto;
+  width: 14px;
+  height: 14px;
+  margin: 0;
+  cursor: pointer;
+}
+
+.tbp-step-input {
+  flex: 1;
+  min-width: 0;
+  font-size: 12.5px;
+  padding: 3px 6px;
+  border: 1px solid transparent;
+  border-radius: 5px;
+  background: transparent;
+  color: var(--text-normal);
+}
+
+.tbp-step-input:hover {
+  border-color: var(--background-modifier-border);
+}
+
+.tbp-step-input:focus {
+  border-color: var(--interactive-accent);
+  background: var(--background-primary);
+}
+
+.tbp-step-row.is-done .tbp-step-input {
+  text-decoration: line-through;
+  color: var(--text-faint);
+}
+
+.tbp-step-btn {
+  flex: 0 0 auto;
+  width: 20px;
+  height: 20px;
+  padding: 0;
+  font-size: 12px;
+  line-height: 1;
+  background: transparent;
+  border: none;
+  border-radius: 4px;
+  color: var(--text-faint);
+  cursor: pointer;
+  opacity: 0;
+  box-shadow: none;
+}
+
+.tbp-step-row:hover .tbp-step-btn {
+  opacity: 1;
+}
+
+.tbp-step-btn:hover {
+  color: var(--text-normal);
+  background: var(--background-modifier-border);
+}
+
+.tbp-step-btn.tbp-step-del:hover {
+  color: #e05656;
+}
+
+.tbp-steps-add {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 8px;
+}
+
+.tbp-steps-add .tbp-step-input {
+  border: 1px dashed var(--background-modifier-border);
+  padding: 5px 8px;
+}
+
+.tbp-steps-add button {
+  flex: 0 0 auto;
+  white-space: nowrap;
+}
+
+/* ---------- 目标拆解：目标卡片内 ---------- */
+
+.tbp-goal-steps {
+  margin-top: 6px;
+  border-top: 1px dashed var(--background-modifier-border);
+  padding-top: 6px;
+}
+
+.tbp-goal-steps-head {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 10.5px;
+  color: var(--text-muted);
+}
+
+.tbp-goal-steps-label {
+  flex: 0 0 auto;
+}
+
+.tbp-mini-bar {
+  flex: 1;
+  height: 4px;
+  border-radius: 2px;
+  background: var(--background-modifier-hover);
+  overflow: hidden;
+}
+
+.tbp-mini-fill {
+  height: 100%;
+  border-radius: 2px;
+  background: var(--interactive-accent);
+  transition: width 0.25s ease;
+}
+
+.tbp-mini-bar.is-all-done .tbp-mini-fill {
+  background: #47b881;
+}
+
+.tbp-steps-toggle {
+  flex: 0 0 auto;
+  font-size: 10px;
+  padding: 0 4px;
+  height: 18px;
+  line-height: 1;
+  background: transparent;
+  border: none;
+  box-shadow: none;
+  color: var(--text-faint);
+  cursor: pointer;
+}
+
+.tbp-steps-toggle:hover {
+  color: var(--interactive-accent);
+  background: transparent;
+}
+
+.tbp-goal-step-next {
+  margin-top: 5px;
+  font-size: 11px;
+  color: var(--text-muted);
+  line-height: 1.5;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+}
+
+.tbp-goal-step-next.is-done {
+  color: #47b881;
+}
+
+.tbp-goal-steps-list {
+  margin-top: 6px;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  max-height: 210px;
+  overflow-y: auto;
+}
+
+.tbp-goal-step {
+  display: flex;
+  align-items: flex-start;
+  gap: 5px;
+  padding: 1px 2px;
+  border-radius: 4px;
+}
+
+.tbp-goal-step:hover {
+  background: var(--background-modifier-hover);
+}
+
+.tbp-goal-step .tbp-step-check {
+  margin-top: 2px;
+}
+
+.tbp-goal-step-text {
+  flex: 1;
+  font-size: 11px;
+  line-height: 1.45;
+  color: var(--text-normal);
+  cursor: pointer;
+  word-break: break-word;
+}
+
+.tbp-goal-step.is-done .tbp-goal-step-text {
+  text-decoration: line-through;
+  color: var(--text-faint);
+}
+
+.tbp-step-plan {
+  flex: 0 0 auto;
+  width: 18px;
+  height: 16px;
+  padding: 0;
+  font-size: 11px;
+  line-height: 1;
+  border: none;
+  background: transparent;
+  box-shadow: none;
+  color: var(--text-faint);
+  cursor: pointer;
+  opacity: 0;
+}
+
+.tbp-goal-step:hover .tbp-step-plan {
+  opacity: 1;
+}
+
+.tbp-step-plan:hover {
+  color: var(--interactive-accent);
+  background: transparent;
+}

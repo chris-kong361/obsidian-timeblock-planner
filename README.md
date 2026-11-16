@@ -1,11 +1,16 @@
 # 时间块规划师 (Timeblock Planner)
 
-> **English** · A time-blocking & goal-tracking plugin for Obsidian. Plan your day on a visual timeline (day view & week view): drag to create, move and resize time blocks; blocks are saved as plain Markdown in daily notes. Track goals by invested hours — goal progress is computed automatically from completed time blocks, with weekly/today stats. No network calls, everything stays in your vault.
+> **English** · A time-blocking & goal-tracking plugin for Obsidian. Plan your day on a visual timeline (day view & week view): drag to create, move and resize time blocks; blocks are saved as plain Markdown in daily notes. Break goals down into small steps, tick them off, and turn any step into a scheduled time block in one click. Track goals by invested hours — goal progress is computed automatically from completed time blocks, with weekly/today stats. No network calls, everything stays in your vault.
 
 Obsidian 插件：目标管理 + 时间块（Time Blocking）日程规划。
 
 ## 更新记录
 
+- **v1.2.0**：目标支持「拆解」——
+  - 编辑/新建目标时可增删改拆解步骤，每步可勾选完成，回车即加下一步，支持粘贴多行批量添加、上下移动排序
+  - 目标卡片显示拆解进度（如 `2/5 步`）与「下一步」，可展开勾选；每一步都能一键「＋」安排时间块（标题自动填该步骤）
+  - 拆解写在 `目标库.md` 的 `## 目标拆解` 区段（`### 目标名` 下 `- [ ] 步骤`），可手动编辑；写回时保留文件里的手写章节
+  - 目标改名时拆解自动跟随
 - **v1.1.2**：修复“部分时间圈选不了”——
   - 周视图时间轴被吸顶日期头整体下压 ~34px（≈28 分钟），与左侧刻度错位；每列顶部 6:00–6:30 被表头遮挡、底部约半小时被截掉，都圈选不到。现在刻度列加同高占位、时间轴显式整天高度，刻度与时间轴严格对齐
   - 日视图 24:00 边界：按在 23:45 之后松手会因起止相同（都取整到 24:00）而建不了块，现在自动退到 23:00–24:00
@@ -29,10 +34,14 @@ Obsidian 插件：目标管理 + 时间块（Time Blocking）日程规划。
 - **拖拽创建时间块**：在时间轴空白处按住拖拽选一个时间段，松手后填写内容
 - **点击完成**：时间块右上角圆圈一键打卡，右键弹出菜单（完成/编辑/删除）
 - **目标管理**：目标库面板，每个目标设定「目标投入时长（小时）」，进度条按已完成时间块的时长自动累计（累计 / 本周 / 今日）
+- **目标拆解**：把目标拆成一个个小步骤，勾选推进；
+  - 编辑目标时添加步骤（回车加下一步、可粘贴多行、可排序）
+  - 目标卡展示 `2/5 步` 进度和「下一步」，展开可逐条勾选
+  - 步骤右侧「＋」直接为这一步安排时间块，块标题自动填入步骤内容
 - **一键安排时间**：在目标卡上点「安排时间」，新建时间块自动关联该目标
 - **数据全部是 Markdown**：
   - 日程：`时间块规划/日程/YYYY-MM-DD.md` 的 `## 时间块` 区段
-  - 目标：`时间块规划/目标库.md` 的表格
+  - 目标：`时间块规划/目标库.md` 的表格 + `## 目标拆解` 区段
   - 可手动编辑、可被同步工具 / 其他插件读取
 - **外部修改自动刷新**：手机端或其他编辑器改动后视图自动重载
 - 支持日期切换（查看过去 / 未来日程）
@@ -43,6 +52,21 @@ Obsidian 插件：目标管理 + 时间块（Time Blocking）日程规划。
 ## 时间块
 - [ ] 09:00 - 10:30 | 写周报 | 分类:专注 | 目标:求职准备 | 备注:先列大纲
 - [x] 11:00 - 11:30 | 复盘昨日
+```
+
+## 目标库格式
+
+```markdown
+| 目标 | 目标时长(h) | 截止日期 | 状态 |
+| --- | --- | --- | --- |
+| 找到用户运营工作 | 60 | 2026-12-31 | 进行中 |
+
+## 目标拆解
+
+### 找到用户运营工作
+- [x] 整理 10 份 JD，提炼关键词
+- [ ] 改简历初稿
+- [ ] 找 3 位学长做模拟面试
 ```
 
 ## 开发

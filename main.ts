@@ -26,13 +26,22 @@ interface Timeblock {
   done: boolean;
 }
 
+/** 目标拆解出的一小步 */
+interface GoalStep {
+  text: string;
+  done: boolean;
+}
+
 /** 一个目标 */
 interface Goal {
   name: string;
   targetHours: number;
   due: string; // YYYY-MM-DD 或空
   status: string; // 进行中 / 已完成 / 暂停
+  steps: GoalStep[];
 }
+
+const STEPS_HEADING = "## 目标拆解";
 
 interface TimeblockSettings {
   scheduleFolder: string;
@@ -177,8 +186,36 @@ function writeDayBlocks(content: string, blocks: Timeblock[]): string {
 
 /* ---- 目标库 ---- */
 
+/** 解析目标拆解区段：### 目标名 下的 - [ ] 步骤 */
+function parseGoalSteps(content: string): Map<string, GoalStep[]> {
+  const map = new Map<string, GoalStep[]>();
+  let inSection = false;
+  let current: string | null = null;
+  for (const raw of content.split("\n")) {
+    const line = raw.trim();
+    if (/^##\s/.test(line)) {
+      inSection = line === STEPS_HEADING.trim();
+      current = null;
+      continue;
+    }
+    if (!inSection) continue;
+    const h3 = /^###\s+(.+)$/.exec(line);
+    if (h3) {
+      current = h3[1].trim();
+      if (!map.has(current)) map.set(current, []);
+      continue;
+    }
+    const m = /^-\s*\[([ xX])\]\s*(.+)$/.exec(line);
+    if (m && current) {
+      map.get(current)!.push({ text: m[2].trim(), done: m[1].toLowerCase() === "x" });
+    }
+  }
+  return map;
+}
+
 function parseGoals(content: string): Goal[] {
   const goals: Goal[] = [];
+  const stepsMap = parseGoalSteps(content);
   for (const line of content.split("\n")) {
     const t = line.trim();
     if (!t.startsWith("|") || t.includes("---")) continue;
@@ -187,19 +224,79 @@ function parseGoals(content: string): Goal[] {
     const name = cells[1];
     if (!name || name === "目标") continue;
     const targetHours = parseFloat(cells[2]) || 0;
-    goals.push({ name, targetHours, due: cells[3] || "", status: cells[4] || "进行中" });
+    goals.push({
+      name,
+      targetHours,
+      due: cells[3] || "",
+      status: cells[4] || "进行中",
+      steps: stepsMap.get(name) || [],
+    });
   }
   return goals;
 }
 
-function serializeGoals(goals: Goal[]): string {
-  let s = `# 目标库\n\n> 由「时间块规划师」插件维护，可手动编辑，目标进度按已完成时间块时长自动统计。\n\n`;
-  s += `| 目标 | 目标时长(h) | 截止日期 | 状态 |\n`;
+function buildGoalsTable(goals: Goal[]): string {
+  let s = `| 目标 | 目标时长(h) | 截止日期 | 状态 |\n`;
   s += `| --- | --- | --- | --- |\n`;
   for (const g of goals) {
     s += `| ${g.name} | ${g.targetHours || ""} | ${g.due || ""} | ${g.status} |\n`;
   }
-  return s;
+  return s.replace(/\n$/, "");
+}
+
+function buildStepsSection(goals: Goal[]): string {
+  const list = goals.filter((g) => g.steps.length > 0);
+  if (list.length === 0) return "";
+  let s = `${STEPS_HEADING}\n\n> 每个目标下用 \`- [ ]\` 列出拆解步骤，勾选后进度会自动统计。\n\n`;
+  for (const g of list) {
+    s += `### ${g.name}\n`;
+    for (const st of g.steps) s += `- [${st.done ? "x" : " "}] ${sanitize(st.text)}\n`;
+    s += `\n`;
+  }
+  return s.trim();
+}
+
+/**
+ * 写回目标库：只更新表格与「目标拆解」区段，
+ * 保留文件里其它手写内容（前言说明、额外章节）。
+ */
+function writeGoalsFile(content: string, goals: Goal[]): string {
+  if (!content.trim()) {
+    return `# 目标库\n\n> 由「时间块规划师」插件维护，可手动编辑，目标进度按已完成时间块时长自动统计。\n\n${buildGoalsTable(goals)}\n\n${buildStepsSection(goals)}\n`;
+  }
+
+  const lines = content.split("\n");
+  const headerIdx = lines.findIndex((l) => l.trim().startsWith("|") && /目标/.test(l) && l.trim().endsWith("|"));
+
+  let preamble: string[];
+  let rest: string[];
+  if (headerIdx === -1) {
+    preamble = lines;
+    rest = [];
+  } else {
+    let end = headerIdx;
+    while (end < lines.length && lines[end].trim().startsWith("|")) end++;
+    preamble = lines.slice(0, headerIdx);
+    rest = lines.slice(end);
+  }
+
+  // 剔除旧的「目标拆解」区段，保留其它章节
+  const others: string[] = [];
+  let skipping = false;
+  for (const l of rest) {
+    if (/^##\s/.test(l.trim())) skipping = l.trim() === STEPS_HEADING.trim();
+    if (!skipping) others.push(l);
+  }
+
+  const parts: string[] = [];
+  const pre = preamble.join("\n").replace(/\s+$/, "");
+  if (pre.trim()) parts.push(pre);
+  parts.push(buildGoalsTable(goals));
+  const oth = others.join("\n").replace(/^\s+/, "").replace(/\s+$/, "");
+  if (oth.trim()) parts.push(oth);
+  const steps = buildStepsSection(goals);
+  if (steps) parts.push(steps);
+  return parts.join("\n\n") + "\n";
 }
 
 /* ============================================================
@@ -366,7 +463,7 @@ class GoalModal extends Modal {
 
   constructor(app: any, goal: Goal, isNew: boolean, resolve: (r: GoalModalResult | null) => void) {
     super(app);
-    this.goal = { ...goal };
+    this.goal = { ...goal, steps: (goal.steps || []).map((s) => ({ ...s })) };
     this.isNew = isNew;
     this.resolveFn = resolve;
   }
@@ -375,6 +472,7 @@ class GoalModal extends Modal {
     this.titleEl.setText(this.isNew ? "新建目标" : "编辑目标");
     const { contentEl } = this;
     contentEl.addClass("tbp-modal");
+    contentEl.addClass("tbp-goal-modal");
 
     new Setting(contentEl).setName("目标名称").addText((t) => {
       t.setValue(this.goal.name);
@@ -398,6 +496,8 @@ class GoalModal extends Modal {
       d.setValue(this.goal.status);
       d.onChange((v) => (this.goal.status = v));
     });
+
+    this.renderStepsEditor(contentEl);
 
     const btnRow = contentEl.createDiv("tbp-modal-actions");
 
@@ -429,11 +529,143 @@ class GoalModal extends Modal {
         new Notice("目标名称不能为空");
         return;
       }
+      this.goal.steps = this.goal.steps
+        .map((s) => ({ text: sanitize(s.text), done: s.done }))
+        .filter((s) => s.text.length > 0);
       const fn = this.resolveFn;
       this.resolveFn = null as any;
       fn({ goal: this.goal, action: "save" });
       this.close();
     });
+  }
+
+  /* ---------- 目标拆解编辑器 ---------- */
+
+  private moveStep(i: number, delta: number, redraw: (focusIdx?: number) => void) {
+    const j = i + delta;
+    if (j < 0 || j >= this.goal.steps.length) return;
+    const [s] = this.goal.steps.splice(i, 1);
+    this.goal.steps.splice(j, 0, s);
+    redraw(j);
+  }
+
+  private renderStepsEditor(parent: HTMLElement) {
+    const wrap = parent.createDiv("tbp-steps-editor");
+    const head = wrap.createDiv("tbp-steps-head");
+    head.createDiv("tbp-steps-title").setText("🧩 目标拆解");
+    const count = head.createDiv("tbp-steps-count");
+
+    const list = wrap.createDiv("tbp-steps-list");
+
+    const refreshCount = () => {
+      const total = this.goal.steps.length;
+      const done = this.goal.steps.filter((s) => s.done).length;
+      count.setText(total ? `${done}/${total} 步完成` : "未拆解");
+      count.toggleClass("is-all-done", total > 0 && done === total);
+    };
+
+    const draw = (focusIdx?: number) => {
+      list.empty();
+      if (this.goal.steps.length === 0) {
+        list.createDiv("tbp-steps-empty").setText("把目标拆成能立刻动手的小步骤，行动会变得更轻松。");
+      }
+      this.goal.steps.forEach((step, i) => {
+        const row = list.createDiv("tbp-step-row");
+        if (step.done) row.addClass("is-done");
+
+        const cb = row.createEl("input", { type: "checkbox", cls: "tbp-step-check" }) as HTMLInputElement;
+        cb.checked = step.done;
+        cb.addEventListener("change", () => {
+          step.done = cb.checked;
+          row.toggleClass("is-done", step.done);
+          refreshCount();
+        });
+
+        const input = row.createEl("input", { type: "text", cls: "tbp-step-input" }) as HTMLInputElement;
+        input.value = step.text;
+        input.placeholder = "这一步要做什么";
+        input.addEventListener("input", () => {
+          step.text = input.value.replace(/[|\r\n]/g, " ");
+        });
+        input.addEventListener("keydown", (e: KeyboardEvent) => {
+          if (e.key === "Enter") {
+            e.preventDefault();
+            this.goal.steps.splice(i + 1, 0, { text: "", done: false });
+            draw(i + 1);
+            refreshCount();
+          } else if (e.key === "Backspace" && input.value === "" && this.goal.steps.length > 0) {
+            e.preventDefault();
+            this.goal.steps.splice(i, 1);
+            draw(Math.max(0, i - 1));
+            refreshCount();
+          }
+        });
+
+        const up = row.createEl("button", { cls: "tbp-step-btn", text: "↑" });
+        up.setAttribute("aria-label", "上移");
+        up.addEventListener("click", () => this.moveStep(i, -1, draw));
+
+        const down = row.createEl("button", { cls: "tbp-step-btn", text: "↓" });
+        down.setAttribute("aria-label", "下移");
+        down.addEventListener("click", () => this.moveStep(i, 1, draw));
+
+        const del = row.createEl("button", { cls: "tbp-step-btn tbp-step-del", text: "×" });
+        del.setAttribute("aria-label", "删除这一步");
+        del.addEventListener("click", () => {
+          this.goal.steps.splice(i, 1);
+          draw();
+          refreshCount();
+        });
+      });
+
+      if (focusIdx != null) {
+        const inputs = list.querySelectorAll(".tbp-step-input");
+        const el = inputs[focusIdx] as HTMLInputElement | undefined;
+        if (el) {
+          el.focus();
+          el.setSelectionRange(el.value.length, el.value.length);
+        }
+      }
+    };
+
+    const addRow = wrap.createDiv("tbp-steps-add");
+    const addInput = addRow.createEl("input", {
+      type: "text",
+      cls: "tbp-step-input",
+      attr: { placeholder: "输入一个步骤，回车添加（可粘贴多行批量添加）" },
+    }) as HTMLInputElement;
+    const addBtn = addRow.createEl("button", { text: "添加", cls: "tbp-today-btn" });
+
+    const addSteps = (raw: string) => {
+      const items = raw
+        .split(/\r?\n/)
+        .map((s) => sanitize(s))
+        .filter(Boolean);
+      if (items.length === 0) return;
+      for (const t of items) this.goal.steps.push({ text: t, done: false });
+      addInput.value = "";
+      draw();
+      refreshCount();
+      addInput.focus();
+    };
+
+    addBtn.addEventListener("click", () => addSteps(addInput.value));
+    addInput.addEventListener("keydown", (e: KeyboardEvent) => {
+      if (e.key === "Enter") {
+        e.preventDefault();
+        addSteps(addInput.value);
+      }
+    });
+    addInput.addEventListener("paste", (e: ClipboardEvent) => {
+      const text = e.clipboardData?.getData("text") ?? "";
+      if (text.includes("\n")) {
+        e.preventDefault();
+        addSteps(text);
+      }
+    });
+
+    draw();
+    refreshCount();
   }
 
   onClose() {
@@ -484,6 +716,8 @@ class TimeblockView extends ItemView {
   goals: Goal[] = [];
   goalStats = new Map<string, GoalStat>();
   showGoals = true;
+  /** 面板中已展开拆解的目标名 */
+  goalStepsOpen = new Set<string>();
 
   /** 已加载的天数据：key = YYYY-MM-DD */
   dayData = new Map<string, Timeblock[]>();
@@ -647,12 +881,11 @@ class TimeblockView extends ItemView {
     const path = this.plugin.settings.goalsFile;
     await this.ensureFolders(path);
     const file = this.app.vault.getAbstractFileByPath(path);
-    const content = serializeGoals(this.goals);
     this.plugin.markSelfWrite(path);
     if (file instanceof TFile) {
-      await this.app.vault.modify(file, content);
+      await this.app.vault.process(file, (content) => writeGoalsFile(content, this.goals));
     } else {
-      await this.app.vault.create(path, content);
+      await this.app.vault.create(path, writeGoalsFile("", this.goals));
     }
   }
 
@@ -972,6 +1205,8 @@ class TimeblockView extends ItemView {
         card.createDiv("tbp-goal-status").setText(g.status);
       }
 
+      if (g.steps.length > 0) this.renderGoalStepsCard(card, g);
+
       const btns = card.createDiv("tbp-goal-btns");
       const planBtn = btns.createEl("button", { text: "安排时间", cls: "tbp-today-btn" });
       planBtn.addEventListener("click", () => this.openNewBlockModal(this.anchorDate(), g.name));
@@ -984,6 +1219,73 @@ class TimeblockView extends ItemView {
     }
 
     panel.scrollTop = savedScroll;
+  }
+
+  /* ---------- 目标拆解（面板展示） ---------- */
+
+  private renderGoalStepsCard(card: HTMLElement, g: Goal) {
+    const total = g.steps.length;
+    const done = g.steps.filter((s) => s.done).length;
+    const pct = total ? Math.round((done / total) * 100) : 0;
+    const open = this.goalStepsOpen.has(g.name);
+    const next = g.steps.find((s) => !s.done);
+
+    const box = card.createDiv("tbp-goal-steps");
+    const head = box.createDiv("tbp-goal-steps-head");
+
+    const label = head.createDiv("tbp-goal-steps-label");
+    label.setText(`🧩 ${done}/${total} 步`);
+
+    const bar = head.createDiv("tbp-mini-bar");
+    const fill = bar.createDiv("tbp-mini-fill");
+    fill.style.width = `${pct}%`;
+    if (done === total) bar.addClass("is-all-done");
+
+    const toggle = head.createEl("button", { cls: "tbp-steps-toggle", text: open ? "收起" : "展开" });
+    toggle.addEventListener("click", () => {
+      if (open) this.goalStepsOpen.delete(g.name);
+      else this.goalStepsOpen.add(g.name);
+      this.renderGoalsPanel();
+    });
+
+    if (!open) {
+      if (next) {
+        const nx = box.createDiv("tbp-goal-step-next");
+        nx.setText(`下一步 · ${next.text}`);
+      } else {
+        box.createDiv("tbp-goal-step-next is-done").setText("全部步骤已完成 🎉");
+      }
+      return;
+    }
+
+    const list = box.createDiv("tbp-goal-steps-list");
+    g.steps.forEach((s, i) => {
+      const row = list.createDiv("tbp-goal-step");
+      if (s.done) row.addClass("is-done");
+
+      const cb = row.createEl("input", { type: "checkbox", cls: "tbp-step-check" }) as HTMLInputElement;
+      cb.checked = s.done;
+      cb.addEventListener("change", () => this.toggleGoalStep(g, i));
+
+      const txt = row.createDiv("tbp-goal-step-text");
+      txt.setText(s.text);
+      txt.addEventListener("click", () => this.toggleGoalStep(g, i));
+
+      const plan = row.createEl("button", { cls: "tbp-step-plan", text: "＋" });
+      plan.setAttribute("aria-label", "为这一步安排时间块");
+      plan.addEventListener("click", (e) => {
+        e.stopPropagation();
+        this.openNewBlockModal(this.anchorDate(), g.name, undefined, undefined, s.text);
+      });
+    });
+  }
+
+  private async toggleGoalStep(g: Goal, i: number) {
+    const step = g.steps[i];
+    if (!step) return;
+    step.done = !step.done;
+    await this.persistGoals();
+    this.renderGoalsPanel();
   }
 
   /* ---------- 时间块渲染 ---------- */
@@ -1302,7 +1604,7 @@ class TimeblockView extends ItemView {
     await this.afterBlocksChanged(date);
   }
 
-  async openNewBlockModal(date: any, goalName = "", startMin?: number, endMin?: number) {
+  async openNewBlockModal(date: any, goalName = "", startMin?: number, endMin?: number, title = "") {
     const now = moment();
     let s = startMin;
     if (s == null) {
@@ -1317,7 +1619,7 @@ class TimeblockView extends ItemView {
     const block: Timeblock = {
       start: s,
       end: en,
-      title: "",
+      title: title || "",
       category: "专注",
       goal: goalName || "",
       note: "",
@@ -1357,7 +1659,7 @@ class TimeblockView extends ItemView {
   /* ---------- 目标操作 ---------- */
 
   async openNewGoalModal() {
-    const goal: Goal = { name: "", targetHours: 0, due: "", status: "进行中" };
+    const goal: Goal = { name: "", targetHours: 0, due: "", status: "进行中", steps: [] };
     const r = await openGoalModal(this.app, goal, true);
     if (!r || r.action !== "save") return;
     if (this.goals.some((g) => g.name === r.goal.name)) {
