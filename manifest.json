@@ -1,9 +1,9 @@
 {
   "id": "timeblock-planner",
-  "name": "时间块规划师",
-  "version": "1.2.0",
+  "name": "Timeblock Planner",
+  "version": "1.2.1",
   "minAppVersion": "1.5.0",
-  "description": "目标管理 + 时间块日程规划：在可视化时间轴上拖拽安排每一天，时间块自动写入 Markdown 日笔记，目标进度按投入时长自动统计。",
+  "description": "Plan your day with time blocks on a visual timeline and break goals into actionable steps. Track progress by hours invested. Time blocks are saved as plain Markdown in daily notes.",
   "author": "chris-kong361",
   "isDesktopOnly": false
 }
