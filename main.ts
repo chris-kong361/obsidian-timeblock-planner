@@ -9,6 +9,7 @@ import {
   TFile,
   WorkspaceLeaf,
   moment,
+  setIcon,
 } from "obsidian";
 
 /* ============================================================
@@ -396,8 +397,7 @@ class BlockModal extends Modal {
       });
     }
 
-    const spacer = btnRow.createDiv("tbp-spacer");
-    spacer.style.flex = "1";
+    btnRow.createDiv("tbp-spacer");
 
     const cancelBtn = btnRow.createEl("button", { text: "取消" });
     cancelBtn.addEventListener("click", () => {
@@ -512,8 +512,7 @@ class GoalModal extends Modal {
       });
     }
 
-    const spacer = btnRow.createDiv("tbp-spacer");
-    spacer.style.flex = "1";
+    btnRow.createDiv("tbp-spacer");
 
     const cancelBtn = btnRow.createEl("button", { text: "取消" });
     cancelBtn.addEventListener("click", () => {
@@ -844,7 +843,7 @@ class TimeblockView extends ItemView {
       if (!this.app.vault.getAbstractFileByPath(cur)) {
         try {
           await this.app.vault.createFolder(cur);
-        } catch (e) {
+        } catch {
           // 并发创建或已存在时忽略
         }
       }
@@ -904,11 +903,11 @@ class TimeblockView extends ItemView {
 
     const nav = header.createDiv("tbp-nav");
     const prevBtn = nav.createEl("button", { cls: "tbp-icon-btn" });
-    prevBtn.innerHTML = '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2"><path d="M15 18l-6-6 6-6"/></svg>';
+    setIcon(prevBtn, "chevron-left");
     prevBtn.addEventListener("click", () => (this.viewMode === "day" ? this.changeDay(-1) : this.changeWeek(-1)));
     this.dateLabelEl = nav.createDiv("tbp-date-label");
     const nextBtn = nav.createEl("button", { cls: "tbp-icon-btn" });
-    nextBtn.innerHTML = '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 18l6-6-6-6"/></svg>';
+    setIcon(nextBtn, "chevron-right");
     nextBtn.addEventListener("click", () => (this.viewMode === "day" ? this.changeDay(1) : this.changeWeek(1)));
     const todayBtn = nav.createEl("button", { text: "今天", cls: "tbp-today-btn" });
     todayBtn.addEventListener("click", () => {
@@ -1126,7 +1125,7 @@ class TimeblockView extends ItemView {
     const now = moment();
     if (this.viewMode === "day") {
       if (!this.dayNowEl || !this.date.isSame(now, "day")) {
-        if (this.dayNowEl) this.dayNowEl.style.display = "none";
+        if (this.dayNowEl) this.dayNowEl.addClass("tbp-now-hidden");
         return;
       }
       const min = now.hours() * 60 + now.minutes();
@@ -1135,7 +1134,7 @@ class TimeblockView extends ItemView {
       for (const col of this.weekCols) {
         if (!col.nowEl) continue;
         if (!col.date.isSame(now, "day")) {
-          col.nowEl.style.display = "none";
+          col.nowEl.addClass("tbp-now-hidden");
           continue;
         }
         const min = now.hours() * 60 + now.minutes();
@@ -1147,10 +1146,10 @@ class TimeblockView extends ItemView {
   private applyNowLine(el: HTMLElement, min: number) {
     const { startHour, endHour } = this.plugin.settings;
     if (min < startHour * 60 || min > endHour * 60) {
-      el.style.display = "none";
+      el.addClass("tbp-now-hidden");
       return;
     }
-    el.style.display = "block";
+    el.removeClass("tbp-now-hidden");
     el.style.top = `${this.minToY(min)}px`;
   }
 
@@ -1294,13 +1293,13 @@ class TimeblockView extends ItemView {
     if (this.viewMode === "day") {
       this.dayBlocksEl.empty();
       this.blocksOf(this.date).forEach((b, idx) => {
-        this.dayBlocksEl.appendChild(this.createBlockEl(b, this.date, idx, false));
+        this.createBlockEl(b, this.date, idx, false, this.dayBlocksEl);
       });
     } else {
       for (const col of this.weekCols) {
         col.blocksEl.empty();
         this.blocksOf(col.date).forEach((b, idx) => {
-          col.blocksEl.appendChild(this.createBlockEl(b, col.date, idx, true));
+          this.createBlockEl(b, col.date, idx, true, col.blocksEl);
         });
       }
     }
@@ -1308,10 +1307,9 @@ class TimeblockView extends ItemView {
     this.updateNowLine();
   }
 
-  private createBlockEl(b: Timeblock, date: any, idx: number, compact: boolean): HTMLElement {
+  private createBlockEl(b: Timeblock, date: any, idx: number, compact: boolean, parent: HTMLElement): HTMLElement {
     const { startHour, endHour } = this.plugin.settings;
-    const el = document.createElement("div");
-    el.addClass("tbp-block");
+    const el = parent.createDiv("tbp-block");
     if (compact) el.addClass("tbp-compact");
     el.addClass(CAT_CLASS[b.category] || "tbp-cat-misc");
     if (b.done) el.addClass("tbp-done");
@@ -1433,14 +1431,11 @@ class TimeblockView extends ItemView {
     const anchorMin = this.yToMin(lane, e.clientY);
     let endMin = anchorMin;
 
-    const preview = document.createElement("div");
-    preview.addClass("tbp-preview");
+    const preview = lane.createDiv("tbp-preview");
     preview.setText("");
-    lane.appendChild(preview);
     const draw = (s: number, en: number) => {
       const lo = Math.min(s, en);
       const hi = Math.max(s, en);
-      preview.style.display = "block";
       preview.style.top = `${this.minToY(lo)}px`;
       preview.style.height = `${Math.max(this.minToY(hi) - this.minToY(lo), 12)}px`;
       preview.setText(`${fmtTime(lo)} – ${fmtTime(hi)}`);
@@ -1885,7 +1880,7 @@ export default class TimeblockPlannerPlugin extends Plugin {
       leaf = workspace.getRightLeaf(false) || workspace.getLeaf(true);
       await leaf.setViewState({ type: VIEW_TYPE, active: true });
     }
-    workspace.revealLeaf(leaf);
+    workspace.setActiveLeaf(leaf, { focus: true });
     return leaf.view;
   }
 
@@ -1913,7 +1908,7 @@ class TimeblockSettingTab extends PluginSettingTab {
   display() {
     const { containerEl } = this;
     containerEl.empty();
-    containerEl.createEl("h2", { text: "时间块规划师" });
+    new Setting(containerEl).setName("时间块规划师").setHeading();
     containerEl.createEl("p", {
       text: "时间块保存在 Markdown 日笔记中，目标保存在目标库笔记中，完全可用其他工具同步。",
     });

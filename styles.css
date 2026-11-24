@@ -70,6 +70,11 @@
   cursor: pointer;
 }
 
+.tbp-icon-btn svg {
+  width: 16px;
+  height: 16px;
+}
+
 .tbp-icon-btn:hover {
   background: var(--background-modifier-hover);
   color: var(--text-normal);
@@ -601,6 +606,10 @@
   background: #e05656;
   z-index: 5;
   pointer-events: none;
+}
+
+.tbp-now.tbp-now-hidden {
+  display: none;
 }
 
 .tbp-now::before {

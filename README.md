@@ -6,6 +6,11 @@ Obsidian 插件：目标管理 + 时间块（Time Blocking）日程规划。
 
 ## 更新记录
 
+- **v1.2.2**：修复社区目录自动审查的 3 类 Error ——
+  - 7 处静态样式赋值（`style.display` / `style.flex`）改为 CSS 类 / `flex:1` 控制，动态位置赋值保留
+  - `revealLeaf` 是 1.7.2 才引入的 API，超出声明的 `minAppVersion: 1.5.0`，改用 `setActiveLeaf(leaf, { focus: true })`（0.16.3 起可用）
+  - 设置页手写 `<h2>` 改为 `new Setting(containerEl).setName(...).setHeading()`
+  - 顺带清理 `innerHTML`（改用 `setIcon`）、`document.createElement`（改用 `createDiv`）、未使用依赖 `builtin-modules`、未使用变量等 Warning。功能与数据格式不变
 - **v1.2.1**：为符合 Obsidian 社区插件目录规范，manifest 显示名改为英文 `Timeblock Planner`（原「时间块规划师」为纯中文，目录要求 Basic Latin 名称），description 同步改为英文（≤250 字符、句号结尾、无特殊字符、以动作开头）。插件 id、功能、数据格式均不变；README 与界面内仍保留中文名。
 - **v1.2.0**：目标支持「拆解」——
   - 编辑/新建目标时可增删改拆解步骤，每步可勾选完成，回车即加下一步，支持粘贴多行批量添加、上下移动排序
