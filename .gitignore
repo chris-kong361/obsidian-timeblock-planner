@@ -3,3 +3,4 @@ node_modules/
 .DS_Store
 push-to-github.bat
 .github-token
+publish-release.cjs
