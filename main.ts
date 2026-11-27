@@ -1050,6 +1050,8 @@ class TimeblockView extends ItemView {
 
   private renderWeekTimeline(body: HTMLElement) {
     const wrap = body.createDiv("tbp-timeline-wrap");
+    // 周视图单独标记：窗口不够宽时允许横向滚动，而不是把 7 列压到互相重叠
+    wrap.addClass("tbp-week-wrap");
     const week = wrap.createDiv("tbp-week");
     this.buildHoursCol(week, true);
 

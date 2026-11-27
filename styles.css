@@ -294,9 +294,15 @@
   min-width: 0;
 }
 
+/* 周视图窗口不够宽时横向滚动，7 列不会硬挤在一起 */
+.tbp-week-wrap {
+  overflow-x: auto;
+}
+
 .tbp-day-col {
   flex: 1;
-  min-width: 0;
+  /* 每列保底宽度；窄窗口由 .tbp-week-wrap 横向滚动兜底，绝不压缩到互相遮挡 */
+  min-width: 96px;
   display: flex;
   flex-direction: column;
   border-left: 1px solid var(--background-modifier-border);
@@ -352,6 +358,15 @@
 
 .tbp-week-lane {
   cursor: crosshair;
+}
+
+/* 关键：周视图的 lane 必须严格贴合自己那一列。
+   .tbp-lane 的 min-width:300px 是给日视图用的，若沿用到周视图，列被 flex 压到
+   一百多像素时 lane 仍向右溢出 300px，绝对定位的时间块就会盖住后面几列，
+   造成「不同天的计划互相遮挡」。这里把它归零，块始终被限制在本列内。 */
+.tbp-week .tbp-lane,
+.tbp-week .tbp-blocks {
+  min-width: 0;
 }
 
 /* 紧凑时间块（周视图） */
