@@ -936,3 +936,170 @@
   color: var(--interactive-accent);
   background: transparent;
 }
+
+/* ============================================================
+ * 触屏 / 手机端适配
+ * 桌面端行为完全不变；以下规则只在 .tbp-touch 下生效。
+ * 核心取舍：空白处 pan-y 可纵向滚动时间轴，时间块上 none 保持可拖拽。
+ * ============================================================ */
+
+.tbp-touch .tbp-header {
+  padding: 6px 8px;
+  gap: 6px;
+}
+
+.tbp-touch .tbp-date-label {
+  font-size: 12px;
+}
+
+.tbp-touch .tbp-stats {
+  order: 5;
+  width: 100%;
+  justify-content: flex-start;
+}
+
+.tbp-touch .tbp-actions {
+  margin-left: auto;
+}
+
+.tbp-touch .tbp-icon-btn {
+  width: 34px;
+  height: 34px;
+}
+
+.tbp-touch .tbp-mode-btn {
+  padding: 6px 13px;
+  font-size: 12px;
+  min-height: 32px;
+}
+
+.tbp-touch .tbp-today-btn,
+.tbp-touch .tbp-primary-btn {
+  min-height: 34px;
+  padding: 6px 12px;
+  font-size: 12px;
+}
+
+.tbp-touch .tbp-body {
+  position: relative;
+}
+
+/* 目标库改为覆盖式抽屉并默认收起，不再挤占时间轴宽度 */
+.tbp-touch .tbp-goals {
+  position: absolute;
+  top: 0;
+  left: 0;
+  bottom: 0;
+  width: min(86vw, 320px);
+  z-index: 20;
+  flex: none;
+  background: var(--background-primary);
+  border-right: 1px solid var(--background-modifier-border);
+  box-shadow: 4px 0 18px rgba(0, 0, 0, 0.18);
+}
+
+/* 时间轴：纵向滚动；周视图额外允许横向滚动 */
+.tbp-touch .tbp-timeline-wrap {
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+}
+
+.tbp-touch .tbp-lane,
+.tbp-touch .tbp-blocks {
+  min-width: 0;
+  touch-action: pan-y;
+}
+
+.tbp-touch .tbp-block,
+.tbp-touch .tbp-check,
+.tbp-touch .tbp-resize {
+  touch-action: none;
+}
+
+.tbp-touch .tbp-week {
+  min-width: 672px;
+}
+
+.tbp-touch .tbp-day-col {
+  min-width: 88px;
+}
+
+.tbp-touch .tbp-week-lane {
+  min-width: 0;
+}
+
+.tbp-touch .tbp-hours {
+  width: 42px;
+}
+
+.tbp-touch .tbp-hour-label {
+  font-size: 10px;
+  padding-right: 5px;
+}
+
+/* 触屏没有 hover：靠 hover 才出现的按钮一律常显，并放大点击区域 */
+.tbp-touch .tbp-step-btn {
+  opacity: 1;
+  width: 28px;
+  height: 28px;
+  font-size: 14px;
+}
+
+.tbp-touch .tbp-step-plan {
+  opacity: 1;
+  width: 28px;
+  height: 26px;
+  font-size: 14px;
+}
+
+.tbp-touch .tbp-step-check {
+  width: 20px;
+  height: 20px;
+}
+
+.tbp-touch .tbp-check {
+  width: 22px;
+  height: 22px;
+  top: 4px;
+  right: 4px;
+  border-width: 2px;
+}
+
+.tbp-touch .tbp-resize {
+  height: 20px;
+}
+
+.tbp-touch .tbp-resize::after {
+  width: 34px;
+  height: 4px;
+}
+
+.tbp-touch .tbp-block.tbp-compact .tbp-check {
+  width: 18px;
+  height: 18px;
+}
+
+.tbp-touch .tbp-block.tbp-compact .tbp-block-title {
+  font-size: 10px;
+  padding-right: 18px;
+}
+
+.tbp-touch .tbp-goal-step {
+  padding: 5px 2px;
+}
+
+.tbp-touch .tbp-goal-step-text {
+  font-size: 12px;
+}
+
+/* iOS 输入框字号小于 16px 会在聚焦时自动放大页面 */
+.tbp-touch .tbp-modal input,
+.tbp-touch .tbp-modal select,
+.tbp-touch .tbp-modal textarea,
+.tbp-touch .tbp-step-input {
+  font-size: 16px;
+}
+
+.tbp-touch .tbp-goal-modal {
+  max-height: 88vh;
+}

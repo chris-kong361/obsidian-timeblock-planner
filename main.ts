@@ -3,6 +3,7 @@ import {
   Menu,
   Modal,
   Notice,
+  Platform,
   Plugin,
   PluginSettingTab,
   Setting,
@@ -715,6 +716,8 @@ class TimeblockView extends ItemView {
   goals: Goal[] = [];
   goalStats = new Map<string, GoalStat>();
   showGoals = true;
+  /** 触屏设备（手机 / 平板）：启用专门的布局与交互 */
+  private readonly isTouch = Platform.isMobile || window.matchMedia("(pointer: coarse)").matches;
   /** 面板中已展开拆解的目标名 */
   goalStepsOpen = new Set<string>();
 
@@ -742,6 +745,8 @@ class TimeblockView extends ItemView {
     this.plugin = plugin;
     this.date = moment();
     this.weekStart = moment().startOf("isoWeek");
+    // 手机端目标库默认收起，避免固定宽度侧栏把时间轴挤出屏幕
+    if (this.isTouch) this.showGoals = false;
   }
 
   getViewType(): string {
@@ -897,6 +902,7 @@ class TimeblockView extends ItemView {
     const root = this.contentEl;
     root.empty();
     root.addClass("tbp-root");
+    if (this.isTouch) root.addClass("tbp-touch");
 
     // ---- 顶部栏 ----
     const header = root.createDiv("tbp-header");
@@ -1340,6 +1346,9 @@ class TimeblockView extends ItemView {
       this.showBlockMenu(e, date, idx);
     });
 
+    // 触屏下 lane 的轻点会新建时间块，块自身的点击不能冒泡上去
+    el.addEventListener("click", (e) => e.stopPropagation());
+
     if (!compact) {
       const resize = el.createDiv("tbp-resize");
       resize.addEventListener("pointerdown", (e) => {
@@ -1413,6 +1422,20 @@ class TimeblockView extends ItemView {
 
   /** 空白处拖拽圈选创建时间块（日/周视图通用）。getDate 实时返回该 lane 对应的日期。 */
   private bindLaneCreateEvents(lane: HTMLElement, getDate: () => any) {
+    // 触屏设备：空白处要能纵向滚动时间轴，所以不用圈选，改为轻点新建（按落点取起始时间）
+    if (this.isTouch) {
+      lane.addEventListener("click", (e) => {
+        const t = e.target as HTMLElement;
+        const blocksEl = lane.querySelector(":scope > .tbp-blocks");
+        if (t !== lane && t !== blocksEl) return;
+        const hi = this.plugin.settings.endHour * 60;
+        let s = this.yToMin(lane, e.clientY);
+        if (s >= hi) s = hi - 60;
+        const en = Math.min(s + 60, hi);
+        this.openNewBlockModal(getDate(), "", s, en);
+      });
+      return;
+    }
     lane.addEventListener("pointerdown", (e) => {
       const t = e.target as HTMLElement;
       if (t !== lane && t !== lane.querySelector(":scope > .tbp-blocks")) {

@@ -1,11 +1,19 @@
 # 时间块规划师 (Timeblock Planner)
 
-> **English** · A time-blocking & goal-tracking plugin for Obsidian. Plan your day on a visual timeline (day view & week view): drag to create, move and resize time blocks; blocks are saved as plain Markdown in daily notes. Break goals down into small steps, tick them off, and turn any step into a scheduled time block in one click. Track goals by invested hours — goal progress is computed automatically from completed time blocks, with weekly/today stats. No network calls, everything stays in your vault.
+> **English** · A time-blocking & goal-tracking plugin for Obsidian. Plan your day on a visual timeline (day view & week view): drag to create, move and resize time blocks; blocks are saved as plain Markdown in daily notes. Break goals down into small steps, tick them off, and turn any step into a scheduled time block in one click. Track goals by invested hours — goal progress is computed automatically from completed time blocks, with weekly/today stats. No network calls, everything stays in your vault. Works on desktop and mobile.
 
 Obsidian 插件：目标管理 + 时间块（Time Blocking）日程规划。
 
 ## 更新记录
 
+- **v1.2.3**：手机端 / 触屏适配（电脑端交互完全不变）——
+  - 时间轴空白处改为允许纵向滚动，手机上终于能上下滑动查看全天日程；时间块本身仍保持可拖拽移动
+  - 触屏下「拖拽圈选创建」改为「轻点空白处新建」，按落点取起始时间、默认 1 小时；点击时间块照旧打开编辑
+  - 目标库改为覆盖式抽屉并默认收起，不再用 270px 固定侧栏把时间轴挤出屏幕
+  - 周视图在窄屏改为可横向滚动（每列最小 88px），左侧刻度列保持吸顶吸左
+  - 原本靠 `:hover` 才显示的按钮（拆解步骤排序 / 删除 / 安排时间）在触屏上常显，点击区域放大到 28px
+  - 输入框字号 ≥16px，避免 iOS 聚焦时整页缩放；弹窗高度、按钮尺寸适配小屏
+  - `isDesktopOnly: false`、无 Node 内置模块依赖，官方目录标记为 Desktop, Mobile
 - **v1.2.2**：修复社区目录自动审查的 3 类 Error ——
   - 7 处静态样式赋值（`style.display` / `style.flex`）改为 CSS 类 / `flex:1` 控制，动态位置赋值保留
   - `revealLeaf` 是 1.7.2 才引入的 API，超出声明的 `minAppVersion: 1.5.0`，改用 `setActiveLeaf(leaf, { focus: true })`（0.16.3 起可用）
@@ -50,6 +58,7 @@ Obsidian 插件：目标管理 + 时间块（Time Blocking）日程规划。
   - 目标：`时间块规划/目标库.md` 的表格 + `## 目标拆解` 区段
   - 可手动编辑、可被同步工具 / 其他插件读取
 - **外部修改自动刷新**：手机端或其他编辑器改动后视图自动重载
+- **手机 / 平板可用**：轻点空白处新建、点时间块编辑、块上拖动改时间、目标库抽屉、周视图横向滚动；电脑端保留原有拖拽圈选与 hover 交互
 - 支持日期切换（查看过去 / 未来日程）
 
 ## 时间块格式
@@ -83,8 +92,14 @@ npm run build        # 生成 main.js
 npm run dev          # 监听模式
 ```
 
-## 安装（手动）
+## 安装
 
-把 `main.js`、`manifest.json`、`styles.css` 复制到你的仓库
-`.obsidian/plugins/timeblock-planner/`，然后在
-设置 → 第三方插件 中启用「时间块规划师」。
+**官方目录（电脑 / 手机相同）**：设置 → 第三方插件 → 浏览 → 搜 `Timeblock`（显示名是英文）→ 安装并启用。条目已标记为 Desktop, Mobile，两端都能装。
+
+**如果点安装一直转圈 / 报网络错误**（国内网络访问 GitHub Release 常见失败），改用手动安装：
+
+1. 从 [Releases](https://github.com/chris-kong361/obsidian-timeblock-planner/releases) 下载 `main.js`、`manifest.json`、`styles.css` 三个文件；打不开 GitHub 时可用 GitHub 镜像加速下载。
+2. 放进**当前仓库**的 `.obsidian/plugins/timeblock-planner/` 目录。手机端可用系统文件 App / 同步工具复制，路径与电脑端一致。
+3. 设置 → 第三方插件 → 刷新列表 → 启用。
+
+手机端在目录里搜不到时：确认搜的是英文 `Timeblock`、关掉「仅显示已安装」、完全退出并重启 App 让它重新拉取目录。
