@@ -1103,3 +1103,13 @@
 .tbp-touch .tbp-goal-modal {
   max-height: 88vh;
 }
+
+/* 左侧工具栏按钮：时间块规划视图显示时高亮 */
+.tbp-ribbon-active,
+.tbp-ribbon-active svg {
+  color: var(--interactive-accent);
+}
+
+.tbp-ribbon-active {
+  background-color: var(--background-modifier-hover);
+}

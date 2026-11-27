@@ -1795,14 +1795,22 @@ export default class TimeblockPlannerPlugin extends Plugin {
 
     this.registerView(VIEW_TYPE, (leaf) => new TimeblockView(leaf, this));
 
-    this.addRibbonIcon("calendar-clock", "时间块规划", () => {
-      this.activateView();
+    // 左侧工具栏按钮：点一次在中间内容区打开，再点一次隐藏
+    const ribbonEl = this.addRibbonIcon("calendar-clock", "时间块规划", () => {
+      this.toggleView();
     });
+    // 视图显示时给按钮一个激活态，方便判断当前是开还是关
+    const syncRibbon = () => {
+      ribbonEl.toggleClass("tbp-ribbon-active", this.isViewVisible());
+    };
+    this.registerEvent(this.app.workspace.on("layout-change", syncRibbon));
+    this.registerEvent(this.app.workspace.on("active-leaf-change", syncRibbon));
+    this.app.workspace.onLayoutReady(syncRibbon);
 
     this.addCommand({
       id: "open-timeblock-view",
-      name: "打开时间块规划视图",
-      callback: () => this.activateView(),
+      name: "显示/隐藏时间块规划视图",
+      callback: () => this.toggleView(),
     });
 
     this.addCommand({
@@ -1893,14 +1901,45 @@ export default class TimeblockPlannerPlugin extends Plugin {
     // ItemView 生命周期由 workspace 管理，无需手动 detach
   }
 
+  /** 视图是否正显示在用户眼前（当前活动视图就是时间块规划视图） */
+  private isViewVisible(): boolean {
+    return this.app.workspace.getActiveViewOfType(TimeblockView) !== null;
+  }
+
+  /** 左侧工具栏按钮：显示 / 隐藏切换。 */
+  async toggleView(): Promise<any> {
+    const { workspace } = this.app;
+    if (this.isViewVisible()) {
+      // 再按一次 → 关掉所有时间块规划标签页
+      for (const leaf of workspace.getLeavesOfType(VIEW_TYPE)) {
+        leaf.detach();
+      }
+      return null;
+    }
+    return this.activateView();
+  }
+
+  /** 确保视图显示在中间内容区并返回它（供各命令调用）。 */
   async activateView(): Promise<any> {
     const { workspace } = this.app;
     const existing = workspace.getLeavesOfType(VIEW_TYPE);
+
+    // 旧版本把视图放在左/右侧栏，先关掉，统一由中间内容区承载
+    const inSideDock = (leaf: WorkspaceLeaf) => {
+      const root = leaf.getRoot();
+      return root === workspace.leftSplit || root === workspace.rightSplit;
+    };
+    const mainLeaf = existing.find((leaf) => !inSideDock(leaf));
+    for (const leaf of existing) {
+      if (inSideDock(leaf)) leaf.detach();
+    }
+
     let leaf: WorkspaceLeaf;
-    if (existing.length > 0) {
-      leaf = existing[0];
+    if (mainLeaf) {
+      leaf = mainLeaf;
     } else {
-      leaf = workspace.getRightLeaf(false) || workspace.getLeaf(true);
+      // 在中间内容区新建一个标签页，不再占用右侧栏
+      leaf = workspace.getLeaf("tab");
       await leaf.setViewState({ type: VIEW_TYPE, active: true });
     }
     workspace.setActiveLeaf(leaf, { focus: true });
