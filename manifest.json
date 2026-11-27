@@ -1,7 +1,7 @@
 {
   "id": "timeblock-planner",
   "name": "Timeblock Planner",
-  "version": "1.2.5",
+  "version": "1.2.6",
   "minAppVersion": "1.5.0",
   "description": "Plan your day with time blocks on a visual timeline and break goals into actionable steps. Track progress by hours invested. Time blocks are saved as plain Markdown in daily notes.",
   "author": "chris-kong361",

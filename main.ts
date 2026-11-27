@@ -63,6 +63,9 @@ const DEFAULT_SETTINGS: TimeblockSettings = {
 
 const VIEW_TYPE = "tbp-view";
 
+/** 周视图日期表头高度，需与 styles.css 的 .tbp-day-head / .tbp-head-spacer 保持一致 */
+const DAY_HEAD_H = 36;
+
 const CATEGORIES = ["专注", "学习", "运动", "生活", "休息", "其他"] as const;
 
 const CAT_CLASS: Record<string, string> = {
@@ -1007,9 +1010,18 @@ class TimeblockView extends ItemView {
 
   /* ---------- 时间轴骨架 ---------- */
 
+  /** 时间轴一整天的像素高度（随设置里的起止时间、每小时像素变化） */
+  private get dayHeightPx(): number {
+    const { startHour, endHour, pxPerHour } = this.plugin.settings;
+    return (endHour - startHour) * pxPerHour;
+  }
+
   private buildHoursCol(parent: HTMLElement, headerSpacer = false): HTMLElement {
     const { startHour, endHour, pxPerHour } = this.plugin.settings;
     const hours = parent.createDiv("tbp-hours");
+    // 刻度列自身没有内容撑高，若只靠 flex 拉伸会停在「可见区高度」，
+    // 右侧竖线（border-right）就会在窗口底部（约 14:00）断开。必须显式撑满整天。
+    hours.style.height = `${this.dayHeightPx + (headerSpacer ? DAY_HEAD_H : 0)}px`;
     // 周视图：日列顶部有吸顶表头（占 36px 布局高度），刻度列要留同样的空位，保证刻度与时间轴对齐
     if (headerSpacer) {
       hours.createDiv("tbp-head-spacer");
@@ -1023,10 +1035,10 @@ class TimeblockView extends ItemView {
   }
 
   private buildLane(parent: HTMLElement): HTMLElement {
-    const { startHour, endHour, pxPerHour } = this.plugin.settings;
+    const { pxPerHour } = this.plugin.settings;
     const lane = parent.createDiv("tbp-lane");
     // 显式指定整天高度，避免 flex 拉伸导致时间轴被压缩、末端槽位丢失
-    lane.style.height = `${(endHour - startHour) * pxPerHour}px`;
+    lane.style.height = `${this.dayHeightPx}px`;
     const px = pxPerHour;
     const half = px / 2;
     lane.style.background = `repeating-linear-gradient(to bottom, transparent 0, transparent ${px - 1}px, var(--background-modifier-border) ${px - 1}px, var(--background-modifier-border) ${px}px), repeating-linear-gradient(to bottom, transparent 0, transparent ${half - 1}px, color-mix(in srgb, var(--background-modifier-border) 50%, transparent) ${half - 1}px, color-mix(in srgb, var(--background-modifier-border) 50%, transparent) ${half}px)`;
@@ -1053,6 +1065,10 @@ class TimeblockView extends ItemView {
     // 周视图单独标记：窗口不够宽时允许横向滚动，而不是把 7 列压到互相重叠
     wrap.addClass("tbp-week-wrap");
     const week = wrap.createDiv("tbp-week");
+    // 关键：周视图容器也要显式撑满整天高度。.tbp-day-col 是 column flex，
+    // lane 的 flex:1 会把内联 height 压成「可见区高度」，
+    // 导致下午两点之后的整段网格线消失（默认 6:00 起、可见区约 8 小时）。
+    week.style.height = `${this.dayHeightPx + DAY_HEAD_H}px`;
     this.buildHoursCol(week, true);
 
     this.weekCols = [];
