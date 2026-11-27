@@ -51,12 +51,14 @@ interface TimeblockSettings {
   startHour: number;
   endHour: number;
   pxPerHour: number;
+  /** 一次性迁移标记：旧版默认 6:00 起，升级为全天 0:00 起 */
+  rangeMigratedAllDay?: boolean;
 }
 
 const DEFAULT_SETTINGS: TimeblockSettings = {
   scheduleFolder: "时间块规划/日程",
   goalsFile: "时间块规划/目标库.md",
-  startHour: 6,
+  startHour: 0,
   endHour: 24,
   pxPerHour: 72,
 };
@@ -1647,7 +1649,8 @@ class TimeblockView extends ItemView {
       if (date.isSame(now, "day")) {
         s = Math.ceil((now.hours() * 60 + now.minutes()) / 30) * 30;
       } else {
-        s = this.plugin.settings.startHour * 60 + 60;
+        // 起始时间改为 0:00 后，非今天的新建默认不落在凌晨，至少从 9:00 起
+        s = Math.max(this.plugin.settings.startHour * 60 + 60, 9 * 60);
       }
     }
     let en = endMin;
@@ -1965,7 +1968,15 @@ export default class TimeblockPlannerPlugin extends Plugin {
   }
 
   async loadSettings() {
-    this.settings = Object.assign({}, DEFAULT_SETTINGS, await this.loadData());
+    const saved = (await this.loadData()) as Partial<TimeblockSettings> | null;
+    this.settings = Object.assign({}, DEFAULT_SETTINGS, saved ?? {});
+    // v1.2.7 起时间轴默认全天 0:00–24:00。旧安装若仍保存着旧的 6:00 默认值
+    // （且从未主动改过时间范围），一次性迁移到 0；写入标记避免用户日后设回 6 被反复覆盖。
+    if (saved && !saved.rangeMigratedAllDay) {
+      if (saved.startHour === 6 && saved.endHour === 24) this.settings.startHour = 0;
+      this.settings.rangeMigratedAllDay = true;
+      await this.saveSettings();
+    }
   }
 
   async saveSettings() {
@@ -2015,11 +2026,14 @@ class TimeblockSettingTab extends PluginSettingTab {
 
     new Setting(containerEl)
       .setName("时间轴开始小时")
+      .setDesc("默认 0，即全天 0:00–24:00；可设为 0–20")
       .addText((t) => {
         t.inputEl.type = "number";
         t.setValue(String(this.plugin.settings.startHour));
         t.onChange(async (v) => {
-          this.plugin.settings.startHour = Math.min(Math.max(parseInt(v) || 6, 0), 20);
+          const n = parseInt(v, 10);
+          // 不能用 `parseInt(v) || 6`：输入 0 是 falsy，会被回退成 6，导致设不了 0:00
+          this.plugin.settings.startHour = Math.min(Math.max(Number.isNaN(n) ? 0 : n, 0), 20);
           await this.plugin.saveSettings();
         });
       });
@@ -2030,7 +2044,8 @@ class TimeblockSettingTab extends PluginSettingTab {
         t.inputEl.type = "number";
         t.setValue(String(this.plugin.settings.endHour));
         t.onChange(async (v) => {
-          this.plugin.settings.endHour = Math.min(Math.max(parseInt(v) || 24, 8), 24);
+          const n = parseInt(v, 10);
+          this.plugin.settings.endHour = Math.min(Math.max(Number.isNaN(n) ? 24 : n, 8), 24);
           await this.plugin.saveSettings();
         });
       });
@@ -2042,7 +2057,8 @@ class TimeblockSettingTab extends PluginSettingTab {
         t.inputEl.type = "number";
         t.setValue(String(this.plugin.settings.pxPerHour));
         t.onChange(async (v) => {
-          this.plugin.settings.pxPerHour = Math.min(Math.max(parseInt(v) || 72, 40), 200);
+          const n = parseInt(v, 10);
+          this.plugin.settings.pxPerHour = Math.min(Math.max(Number.isNaN(n) ? 72 : n, 40), 200);
           await this.plugin.saveSettings();
         });
       });
