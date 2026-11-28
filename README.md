@@ -1,11 +1,18 @@
 # 时间块规划师 (Timeblock Planner)
 
-> **English** · A time-blocking & goal-tracking plugin for Obsidian. Plan your day on a visual timeline (day view & week view): drag to create, move and resize time blocks; blocks are saved as plain Markdown in daily notes. Break goals down into small steps, tick them off, and turn any step into a scheduled time block in one click. Track goals by invested hours — goal progress is computed automatically from completed time blocks, with weekly/today stats. No network calls, everything stays in your vault. Works on desktop and mobile.
+> **English** · A time-blocking & goal-tracking plugin for Obsidian. Plan your day on a visual timeline (day view & week view): drag to create, move and resize time blocks; blocks are saved as plain Markdown in daily notes. Break goals down into small steps, tick them off, and turn any step into a scheduled time block in one click. Track goals by invested hours — goal progress is computed automatically from completed time blocks, with weekly/today stats. No network calls by default; optional private-Gist sync keeps desktop and mobile devices in sync. Works on desktop and mobile.
 
 Obsidian 插件：目标管理 + 时间块（Time Blocking）日程规划。
 
 ## 更新记录
 
+- **v1.3.0**：新增**双端同步（手机 ↔ 电脑）**，并加固本地文件同步——
+  - 插件原本只读写本机库里的 Markdown，两端若是不同的库，计划永远不会互通。现在内置可选的 **GitHub Gist 云同步**：两端填同一份 Token 与 Gist ID 即可自动双向同步，不要求两端是同一个 vault、也不依赖 OneDrive / Obsidian Sync
+  - 同步按「天」+「目标库」两个粒度做合并：两端改了不同日期 → 无损合并；只有一端改过 → 取改过的那端；同一天两端都改 → 取最后保存的版本并弹提示。每次本地编辑记时间戳，避免后写的一端整份覆盖另一端
+  - 触发时机：编辑后 3 秒防抖推送、每 60 秒拉取、App 从后台回前台时拉取、命令面板「立即同步（双端）」、设置页「立即同步」
+  - 设置页可一键**创建私有 Gist**（自动填 ID），并提供「上传覆盖云端 / 从云端恢复」两个首次配置与冲突兜底按钮；同步状态实时显示
+  - 本地加固：vault 事件补齐 `create` / `rename`（原先只有 `modify` / `delete`）；每 30 秒比对已加载文件的**内容哈希**作为兜底（手机端同步服务常不触发 vault 事件）；自写文件不误报；启动时检测同步冲突副本并提醒，绝不自动删除用户文件
+  - 云同步默认关闭；不填写 Token 时插件行为与旧版完全一致，所有数据仍以 Markdown 存在库里。Gist 是私有（secret）的，Token 只保存在本机插件设置中
 - **v1.2.7**：日视图 / 周视图时间范围扩大到全天 **0:00–24:00**——
   - 默认起始小时由 6 改为 0（结束仍为 24），时间轴从 18×72 = 1296px 变为 24×72 = **1728px**，凌晨时段也能查看和圈选
   - 刻度列 / 周视图容器的整天高度按当前设置动态计算（v1.2.6 的修复），范围变化后仍自动撑满，不会重现「14:00 之后消失」
@@ -63,7 +70,7 @@ Obsidian 插件：目标管理 + 时间块（Time Blocking）日程规划。
 - **日视图 / 周视图**：顶栏「日 / 周」一键切换
   - 日视图：单日大时间轴，块可拖拽移动、底部拉伸调时长
   - 周视图：7 列并排（周一～周日），今日列高亮 + 红色时刻线，列内空白处拖拽即可创建时间块，点击列头跳到该日
-  - 两个视图都支持 6:00–24:00 时间轴（可在设置中调整）、30 分钟网格对齐
+  - 两个视图都支持 0:00–24:00 全天时间轴（可在设置中调整）、30 分钟网格对齐
 - **拖拽创建时间块**：在时间轴空白处按住拖拽选一个时间段，松手后填写内容
 - **点击完成**：时间块右上角圆圈一键打卡，右键弹出菜单（完成/编辑/删除）
 - **目标管理**：目标库面板，每个目标设定「目标投入时长（小时）」，进度条按已完成时间块的时长自动累计（累计 / 本周 / 今日）
@@ -76,7 +83,8 @@ Obsidian 插件：目标管理 + 时间块（Time Blocking）日程规划。
   - 日程：`时间块规划/日程/YYYY-MM-DD.md` 的 `## 时间块` 区段
   - 目标：`时间块规划/目标库.md` 的表格 + `## 目标拆解` 区段
   - 可手动编辑、可被同步工具 / 其他插件读取
-- **外部修改自动刷新**：手机端或其他编辑器改动后视图自动重载
+- **双端同步（可选）**：内置 GitHub Gist 云同步，手机与电脑不必是同一个库也能自动同步；见下方「双端同步配置」
+- **外部修改自动刷新**：手机端或其他编辑器改动后视图自动重载；补齐 `create` / `rename` 事件，并有内容哈希轮询兜底
 - **手机 / 平板可用**：轻点空白处新建、点时间块编辑、块上拖动改时间、目标库抽屉、周视图横向滚动；电脑端保留原有拖拽圈选与 hover 交互
 - 支持日期切换（查看过去 / 未来日程）
 
@@ -122,3 +130,31 @@ npm run dev          # 监听模式
 3. 设置 → 第三方插件 → 刷新列表 → 启用。
 
 手机端在目录里搜不到时：确认搜的是英文 `Timeblock`、关掉「仅显示已安装」、完全退出并重启 App 让它重新拉取目录。
+
+## 双端同步配置
+
+插件默认只读写**本机库**里的 Markdown，两端若是不同的库，计划不会互通。开启内置同步后，数据通过**你自己的私有 Gist** 在两端之间传递，不经过任何第三方服务，也不要求两端用同一个 vault 或同一套同步服务。
+
+1. **拿一个 GitHub Token**（免费，只需 gist 权限）
+   - GitHub → Settings → Developer settings → Personal access tokens
+   - classic token 只勾 `gist`；或 fine-grained token 给当前账号的 **Gists** 读写权限
+   - 复制 `ghp_…` / `github_pat_…` 开头的字符串
+2. **电脑端配置**：设置 → 第三方插件 → 时间块规划师 → 「双端同步」
+   - 粘贴 Token，点「创建新的同步 Gist」（自动建一个**私有** Gist 并填好 ID）
+   - 打开「启用双端同步」，点「立即同步」把现有计划上传一次
+3. **手机端配置**：填**同一个 Token 和同一个 Gist ID**，打开「启用双端同步」→「立即同步」拉取
+   - 之后两端编辑都会自动同步；也可在命令面板搜「立即同步（双端）」
+4. **首次两端已有不同数据时**：在数据最全的一端点「上传覆盖云端」，另一端点「从云端恢复」
+
+**同步规则**
+
+- 按「天」+「目标库」两个粒度合并：两端改不同日期互不干扰；只有一端改过就取改过的那端
+- 同一天两端都改：保留最后保存的版本，并弹出提示告知
+- 云端数据写回本地时只重写 `## 时间块` 区段 / 目标表格与 `## 目标拆解`，**保留笔记里手写的内容**
+- 数据始终以 Markdown 存在库里；关掉同步或删掉 Token，插件行为与旧版完全一致
+
+**注意**
+
+- Token 明文保存在本机 `.obsidian/plugins/timeblock-planner/data.json`。若你的库用 OneDrive / Obsidian Sync 同步了 `.obsidian` 目录，Token 会跟着同步；介意的话请自行斟酌
+- Gist 是私有的，但别把 Token 发给别人；不用了到 GitHub 撤销该 Token
+- 两端若本来就是同一个同步中的 vault，也可以不启用云同步 —— 本地文件变更检测（`create` / `rename` + 内容哈希轮询）已加固

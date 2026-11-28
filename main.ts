@@ -8,40 +8,21 @@ import {
   PluginSettingTab,
   Setting,
   TFile,
+  Vault,
   WorkspaceLeaf,
   moment,
+  requestUrl,
   setIcon,
 } from "obsidian";
 
-/* ============================================================
- * 数据模型
- * ============================================================ */
-
-/** 一个时间块。start / end 为距 0:00 的分钟数 */
-interface Timeblock {
-  start: number;
-  end: number;
-  title: string;
-  category: string;
-  goal: string;
-  note: string;
-  done: boolean;
-}
-
-/** 目标拆解出的一小步 */
-interface GoalStep {
-  text: string;
-  done: boolean;
-}
-
-/** 一个目标 */
-interface Goal {
-  name: string;
-  targetHours: number;
-  due: string; // YYYY-MM-DD 或空
-  status: string; // 进行中 / 已完成 / 暂停
-  steps: GoalStep[];
-}
+import { hashText, mergeSyncPayloads } from "./sync-merge";
+import type {
+  CloudSnapshot,
+  Goal,
+  GoalStep,
+  SyncPayload,
+  Timeblock,
+} from "./sync-merge";
 
 const STEPS_HEADING = "## 目标拆解";
 
@@ -53,6 +34,14 @@ interface TimeblockSettings {
   pxPerHour: number;
   /** 一次性迁移标记：旧版默认 6:00 起，升级为全天 0:00 起 */
   rangeMigratedAllDay?: boolean;
+  /** 双端同步：GitHub Personal Access Token（仅需 gist 权限） */
+  gistToken: string;
+  /** 双端同步：存放快照的 Secret Gist ID，两端填同一个 */
+  gistId: string;
+  /** 是否启用云同步（填好 token + gistId 后打开） */
+  syncEnabled: boolean;
+  /** 自动同步：编辑后延迟推送、定时拉取、回到前台时拉取 */
+  autoSync: boolean;
 }
 
 const DEFAULT_SETTINGS: TimeblockSettings = {
@@ -61,7 +50,42 @@ const DEFAULT_SETTINGS: TimeblockSettings = {
   startHour: 0,
   endHour: 24,
   pxPerHour: 72,
+  gistToken: "",
+  gistId: "",
+  syncEnabled: false,
+  autoSync: true,
 };
+
+/** 本地同步元数据（与设置一起存在 data.json 的 syncMeta 字段） */
+interface SyncMeta {
+  deviceId: string;
+  /** 每个日期最后一次「本地写入」的时间戳，用于按天判断谁更新 */
+  dayTs: Record<string, number>;
+  goalsTs: number;
+  /** 上一次成功同步的时间戳，用于识别「上次同步后两端都改过」的冲突 */
+  lastSyncAt: number;
+}
+
+interface GistFileShape {
+  content?: string;
+  truncated?: boolean;
+  raw_url?: string;
+}
+
+interface GistShape {
+  id?: string;
+  files?: Record<string, GistFileShape>;
+}
+
+const GIST_FILE = "timeblock-planner.json";
+const GIST_DESC = "Timeblock Planner sync data (generated, do not edit manually)";
+const GITHUB_API = "https://api.github.com";
+/** 本地写入后延迟推送，避免连续编辑产生多次请求 */
+const SYNC_DEBOUNCE_MS = 3000;
+/** 自动轮询间隔 */
+const SYNC_POLL_MS = 60 * 1000;
+/** 本地文件兜底检查间隔（应对同步服务不触发 vault 事件） */
+const DISK_CHECK_MS = 30 * 1000;
 
 const VIEW_TYPE = "tbp-view";
 
@@ -103,6 +127,25 @@ function fmtDuration(min: number): string {
 /** 清理用户输入，避免破坏行格式（| 与换行） */
 function sanitize(s: string): string {
   return s.replace(/[|\r\n]/g, " ").trim();
+}
+
+/* 合并算法与数据模型抽到 sync-merge.ts（纯函数，可独立单测） */
+
+/** 确保目标路径的父文件夹存在（视图与同步引擎共用） */
+async function ensureVaultFolders(vault: Vault, path: string): Promise<void> {
+  const parts = path.split("/");
+  parts.pop();
+  let cur = "";
+  for (const p of parts) {
+    cur = cur ? `${cur}/${p}` : p;
+    if (!vault.getAbstractFileByPath(cur)) {
+      try {
+        await vault.createFolder(cur);
+      } catch {
+        // 并发创建或已存在时忽略
+      }
+    }
+  }
 }
 
 /* ============================================================
@@ -728,6 +771,9 @@ class TimeblockView extends ItemView {
 
   /** 已加载的天数据：key = YYYY-MM-DD */
   dayData = new Map<string, Timeblock[]>();
+  /** 已加载天/目标库在磁盘上的内容哈希，用于兜底检测外部改动 */
+  private diskHashes = new Map<string, string>();
+  private goalsHash = "";
 
   private dayLaneEl!: HTMLElement;
   private dayBlocksEl!: HTMLElement;
@@ -831,13 +877,57 @@ class TimeblockView extends ItemView {
 
   private async loadDayInto(date: any) {
     const path = this.pathOf(date);
+    const key = this.keyOf(date);
     const file = this.app.vault.getAbstractFileByPath(path);
     if (file instanceof TFile) {
       const content = await this.app.vault.read(file);
-      this.dayData.set(this.keyOf(date), parseDayBlocks(content));
+      this.dayData.set(key, parseDayBlocks(content));
+      this.diskHashes.set(key, hashText(content));
     } else {
-      this.dayData.set(this.keyOf(date), []);
+      this.dayData.set(key, []);
+      this.diskHashes.set(key, "");
     }
+  }
+
+  /** 重新读取磁盘内容并记下哈希（本地写完文件后调用，避免兜底检查误判） */
+  private async refreshHashOf(date: any, content?: string) {
+    const key = this.keyOf(date);
+    if (content !== undefined) {
+      this.diskHashes.set(key, hashText(content));
+      return;
+    }
+    const file = this.app.vault.getAbstractFileByPath(this.pathOf(date));
+    this.diskHashes.set(
+      key,
+      file instanceof TFile ? hashText(await this.app.vault.read(file)) : ""
+    );
+  }
+
+  /**
+   * 兜底：某些同步服务（尤其手机端）把文件同步过来时不会触发 vault 的 modify 事件，
+   * 定时比对已加载日期与目标库的内容哈希，变了就重载视图。
+   */
+  async checkDiskChanges(): Promise<boolean> {
+    if (this.interactions > 0 || this.reloading) return false;
+    let changed = false;
+    for (const key of Array.from(this.dayData.keys())) {
+      const path = `${this.plugin.settings.scheduleFolder}/${key}.md`;
+      const file = this.app.vault.getAbstractFileByPath(path);
+      const h = file instanceof TFile ? hashText(await this.app.vault.read(file)) : "";
+      if (h !== (this.diskHashes.get(key) ?? "")) {
+        this.diskHashes.set(key, h);
+        changed = true;
+      }
+    }
+    const gp = this.plugin.settings.goalsFile;
+    const gf = this.app.vault.getAbstractFileByPath(gp);
+    const gh = gf instanceof TFile ? hashText(await this.app.vault.read(gf)) : "";
+    if (gh !== this.goalsHash) {
+      this.goalsHash = gh;
+      changed = true;
+    }
+    if (changed) await this.reloadAll();
+    return changed;
   }
 
   private blocksOf(date: any): Timeblock[] {
@@ -845,34 +935,25 @@ class TimeblockView extends ItemView {
   }
 
   private async ensureFolders(path: string) {
-    const parts = path.split("/");
-    parts.pop();
-    let cur = "";
-    for (const p of parts) {
-      cur = cur ? `${cur}/${p}` : p;
-      if (!this.app.vault.getAbstractFileByPath(cur)) {
-        try {
-          await this.app.vault.createFolder(cur);
-        } catch {
-          // 并发创建或已存在时忽略
-        }
-      }
-    }
+    await ensureVaultFolders(this.app.vault, path);
   }
 
   private async persistDayOf(date: any) {
     const path = this.pathOf(date);
+    const key = this.keyOf(date);
     await this.ensureFolders(path);
     const blocks = this.blocksOf(date);
-    let file = this.app.vault.getAbstractFileByPath(path);
-    if (!(file instanceof TFile)) {
-      const content = dayTemplate(this.keyOf(date), blocks);
-      this.plugin.markSelfWrite(path);
-      await this.app.vault.create(path, content);
-      return;
-    }
+    const file = this.app.vault.getAbstractFileByPath(path);
     this.plugin.markSelfWrite(path);
-    await this.app.vault.process(file, (content) => writeDayBlocks(content, blocks));
+    if (!(file instanceof TFile)) {
+      const content = dayTemplate(key, blocks);
+      await this.app.vault.create(path, content);
+      this.diskHashes.set(key, hashText(content));
+    } else {
+      await this.app.vault.process(file, (content) => writeDayBlocks(content, blocks));
+      await this.refreshHashOf(date);
+    }
+    this.plugin.markDayChanged(key);
   }
 
   private async loadGoals() {
@@ -881,8 +962,10 @@ class TimeblockView extends ItemView {
     if (file instanceof TFile) {
       const content = await this.app.vault.read(file);
       this.goals = parseGoals(content);
+      this.goalsHash = hashText(content);
     } else {
       this.goals = [];
+      this.goalsHash = "";
     }
   }
 
@@ -896,7 +979,11 @@ class TimeblockView extends ItemView {
     } else {
       await this.app.vault.create(path, writeGoalsFile("", this.goals));
     }
+    const gf = this.app.vault.getAbstractFileByPath(path);
+    this.goalsHash = gf instanceof TFile ? hashText(await this.app.vault.read(gf)) : "";
+    this.plugin.markGoalsChanged();
   }
+
 
   /* ---------- 渲染总入口 ---------- */
 
@@ -1810,6 +1897,14 @@ class TimeblockView extends ItemView {
 
 export default class TimeblockPlannerPlugin extends Plugin {
   settings: TimeblockSettings;
+  private syncMeta!: SyncMeta;
+  private syncInFlight = false;
+  private syncQueued = false;
+  private syncTimer = 0;
+  /** 设置页展示的同步状态文本 */
+  syncStatusText = "尚未同步";
+  /** 设置页注册的状态刷新回调 */
+  onSyncStatusChanged: (() => void) | null = null;
 
   async onload() {
     await this.loadSettings();
@@ -1826,7 +1921,14 @@ export default class TimeblockPlannerPlugin extends Plugin {
     };
     this.registerEvent(this.app.workspace.on("layout-change", syncRibbon));
     this.registerEvent(this.app.workspace.on("active-leaf-change", syncRibbon));
-    this.app.workspace.onLayoutReady(syncRibbon);
+    this.app.workspace.onLayoutReady(() => {
+      syncRibbon();
+      this.checkConflictCopies();
+      // 启动后延迟同步一次，避免拖慢 Obsidian 加载
+      window.setTimeout(() => {
+        if (this.settings.autoSync) void this.syncNow(false);
+      }, 3000);
+    });
 
     this.addCommand({
       id: "open-timeblock-view",
@@ -1869,21 +1971,50 @@ export default class TimeblockPlannerPlugin extends Plugin {
       },
     });
 
+    this.addCommand({
+      id: "sync-now",
+      name: "立即同步（双端）",
+      callback: () => this.syncNow(true),
+    });
+
     this.addSettingTab(new TimeblockSettingTab(this.app, this));
 
-    // 外部修改（手机端 / 其他编辑器 / 手动编辑）时刷新视图
-    this.registerEvent(
-      this.app.vault.on("modify", (file) => {
-        if (!(file instanceof TFile)) return;
-        this.refreshViewIfRelevant(file);
-      })
-    );
-    this.registerEvent(
-      this.app.vault.on("delete", (file) => {
-        if (!(file instanceof TFile)) return;
-        this.refreshViewIfRelevant(file);
-      })
-    );
+    // 外部修改（手机端 / 其他编辑器 / 手动编辑 / 同步服务落地）时刷新视图。
+    // create 与 rename 也要监听：有些同步服务是「先建临时文件再改名」落地的。
+    this.registerEvent(this.app.vault.on("modify", (f) => {
+      if (f instanceof TFile) this.refreshViewIfRelevant(f);
+    }));
+    this.registerEvent(this.app.vault.on("create", (f) => {
+      if (f instanceof TFile) this.refreshViewIfRelevant(f);
+    }));
+    this.registerEvent(this.app.vault.on("delete", (f) => {
+      if (f instanceof TFile) this.refreshViewIfRelevant(f);
+    }));
+    this.registerEvent(this.app.vault.on("rename", (f) => {
+      if (f instanceof TFile) this.refreshViewIfRelevant(f);
+    }));
+
+    // 定时拉取另一端的改动；编辑后的推送由 scheduleSync 防抖负责
+    this.registerInterval(window.setInterval(() => {
+      if (this.settings.autoSync) void this.syncNow(false);
+    }, SYNC_POLL_MS));
+
+    // 兜底：手机端同步服务常常不触发 vault 事件，定时比对磁盘内容哈希
+    this.registerInterval(window.setInterval(() => {
+      for (const leaf of this.app.workspace.getLeavesOfType(VIEW_TYPE)) {
+        const v = leaf.view;
+        if (v instanceof TimeblockView) void v.checkDiskChanges();
+      }
+    }, DISK_CHECK_MS));
+
+    // App 从后台回到前台时立刻拉一次（手机端最常见的使用路径）
+    const onVisible = () => {
+      if (document.visibilityState === "visible" && this.settings.autoSync) {
+        this.scheduleSync(1000);
+      }
+    };
+    document.addEventListener("visibilitychange", onVisible);
+    this.register(() => document.removeEventListener("visibilitychange", onVisible));
   }
 
   private refreshTimer = 0;
@@ -1968,19 +2099,330 @@ export default class TimeblockPlannerPlugin extends Plugin {
   }
 
   async loadSettings() {
-    const saved = (await this.loadData()) as Partial<TimeblockSettings> | null;
-    this.settings = Object.assign({}, DEFAULT_SETTINGS, saved ?? {});
+    const raw = (await this.loadData()) as
+      | (Partial<TimeblockSettings> & { syncMeta?: Partial<SyncMeta> })
+      | null;
+    const saved: Partial<TimeblockSettings> = raw ? { ...raw } : {};
+    delete (saved as { syncMeta?: unknown }).syncMeta;
+    this.settings = Object.assign({}, DEFAULT_SETTINGS, saved);
+    const meta = raw?.syncMeta;
+    this.syncMeta = {
+      deviceId:
+        meta?.deviceId ||
+        `dev-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`,
+      dayTs: meta?.dayTs ?? {},
+      goalsTs: meta?.goalsTs ?? 0,
+      lastSyncAt: meta?.lastSyncAt ?? 0,
+    };
     // v1.2.7 起时间轴默认全天 0:00–24:00。旧安装若仍保存着旧的 6:00 默认值
     // （且从未主动改过时间范围），一次性迁移到 0；写入标记避免用户日后设回 6 被反复覆盖。
-    if (saved && !saved.rangeMigratedAllDay) {
-      if (saved.startHour === 6 && saved.endHour === 24) this.settings.startHour = 0;
+    if (raw && !raw.rangeMigratedAllDay) {
+      if (raw.startHour === 6 && raw.endHour === 24) this.settings.startHour = 0;
       this.settings.rangeMigratedAllDay = true;
       await this.saveSettings();
     }
   }
 
   async saveSettings() {
-    await this.saveData(this.settings);
+    await this.saveData({ ...this.settings, syncMeta: this.syncMeta });
+  }
+
+  /* ==========================================================
+   * 双端同步（GitHub Gist）
+   * ========================================================== */
+
+  private get syncConfigured(): boolean {
+    return (
+      this.settings.syncEnabled &&
+      !!this.settings.gistToken.trim() &&
+      !!this.settings.gistId.trim()
+    );
+  }
+
+  private setSyncStatus(text: string) {
+    this.syncStatusText = text;
+    if (this.onSyncStatusChanged) this.onSyncStatusChanged();
+  }
+
+  /** 本地编辑后：记录该天时间戳、持久化、防抖触发同步 */
+  markDayChanged(key: string) {
+    this.syncMeta.dayTs[key] = Date.now();
+    void this.saveSettings();
+    this.scheduleSync();
+  }
+
+  markGoalsChanged() {
+    this.syncMeta.goalsTs = Date.now();
+    void this.saveSettings();
+    this.scheduleSync();
+  }
+
+  setDayTsFromCloud(key: string, ts: number) {
+    this.syncMeta.dayTs[key] = ts;
+    void this.saveSettings();
+  }
+
+  setGoalsTsFromCloud(ts: number) {
+    this.syncMeta.goalsTs = ts;
+    void this.saveSettings();
+  }
+
+  scheduleSync(delay = SYNC_DEBOUNCE_MS) {
+    if (!this.syncConfigured || !this.settings.autoSync) return;
+    if (this.syncTimer) window.clearTimeout(this.syncTimer);
+    this.syncTimer = window.setTimeout(() => {
+      this.syncTimer = 0;
+      void this.syncNow(false);
+    }, delay);
+  }
+
+  private async gistRequest(method: string, path: string, body?: unknown): Promise<GistShape> {
+    const res = await requestUrl({
+      url: `${GITHUB_API}${path}`,
+      method,
+      headers: {
+        Accept: "application/vnd.github+json",
+        "X-GitHub-Api-Version": "2022-11-28",
+        Authorization: `Bearer ${this.settings.gistToken.trim()}`,
+        "Content-Type": "application/json",
+      },
+      body: body === undefined ? undefined : JSON.stringify(body),
+    });
+    return res.json as GistShape;
+  }
+
+  private async readCloud(): Promise<CloudSnapshot | null> {
+    const gist = await this.gistRequest("GET", `/gists/${this.settings.gistId.trim()}`);
+    const f = gist.files?.[GIST_FILE];
+    if (!f) return null;
+    let text = f.content ?? "";
+    if (f.truncated && f.raw_url) {
+      const raw = await requestUrl({
+        url: f.raw_url,
+        headers: {
+          Accept: "application/vnd.github.raw+json",
+          Authorization: `Bearer ${this.settings.gistToken.trim()}`,
+        },
+      });
+      text = raw.text;
+    }
+    if (!text.trim()) return null;
+    try {
+      const parsed = JSON.parse(text) as CloudSnapshot;
+      if (parsed.schema !== 1 || !parsed.days || !parsed.dayTs) return null;
+      return parsed;
+    } catch {
+      return null;
+    }
+  }
+
+  private async writeCloud(snapshot: CloudSnapshot): Promise<void> {
+    await this.gistRequest("PATCH", `/gists/${this.settings.gistId.trim()}`, {
+      files: { [GIST_FILE]: { content: JSON.stringify(snapshot, null, 2) } },
+    });
+  }
+
+  /** 用当前 Token 新建一个 Secret Gist，并自动填入设置 */
+  async createGist(): Promise<string> {
+    if (!this.settings.gistToken.trim()) throw new Error("请先填写 GitHub Token");
+    const empty: CloudSnapshot = {
+      schema: 1,
+      updatedAt: Date.now(),
+      deviceId: this.syncMeta.deviceId,
+      days: {},
+      dayTs: {},
+      goals: [],
+      goalsTs: 0,
+    };
+    const gist = await this.gistRequest("POST", "/gists", {
+      description: GIST_DESC,
+      public: false,
+      files: { [GIST_FILE]: { content: JSON.stringify(empty, null, 2) } },
+    });
+    if (!gist.id) throw new Error("GitHub 未返回 Gist ID");
+    this.settings.gistId = String(gist.id);
+    this.settings.syncEnabled = true;
+    await this.saveSettings();
+    return this.settings.gistId;
+  }
+
+  /** 收集本地全部日程与目标，作为同步载荷 */
+  private async collectLocal(): Promise<SyncPayload> {
+    const folder = this.settings.scheduleFolder;
+    const days: Record<string, Timeblock[]> = {};
+    const dayTs: Record<string, number> = { ...this.syncMeta.dayTs };
+    const files = this.app.vault
+      .getMarkdownFiles()
+      .filter((f) => f.parent && f.parent.path === folder);
+    for (const f of files) {
+      if (!moment(f.basename, "YYYY-MM-DD", true).isValid()) continue;
+      const key = f.basename;
+      days[key] = parseDayBlocks(await this.app.vault.read(f));
+      if (!dayTs[key]) dayTs[key] = f.stat.mtime || 0;
+    }
+    let goals: Goal[] = [];
+    let goalsTs = this.syncMeta.goalsTs;
+    const gf = this.app.vault.getAbstractFileByPath(this.settings.goalsFile);
+    if (gf instanceof TFile) {
+      goals = parseGoals(await this.app.vault.read(gf));
+      if (!goalsTs) goalsTs = gf.stat.mtime || 0;
+    }
+    return { days, dayTs, goals, goalsTs };
+  }
+
+  /** 把云端较新的一天写回本地 Markdown（保留用户手写章节） */
+  private async writeDayToDisk(key: string, blocks: Timeblock[], ts: number): Promise<void> {
+    if (!moment(key, "YYYY-MM-DD", true).isValid()) return;
+    const path = `${this.settings.scheduleFolder}/${key}.md`;
+    await ensureVaultFolders(this.app.vault, path);
+    const file = this.app.vault.getAbstractFileByPath(path);
+    this.markSelfWrite(path);
+    if (file instanceof TFile) {
+      await this.app.vault.process(file, (c) => writeDayBlocks(c, blocks));
+    } else {
+      await this.app.vault.create(path, dayTemplate(key, blocks));
+    }
+    this.setDayTsFromCloud(key, ts);
+  }
+
+  private async writeGoalsToDisk(goals: Goal[], ts: number): Promise<void> {
+    const path = this.settings.goalsFile;
+    await ensureVaultFolders(this.app.vault, path);
+    const file = this.app.vault.getAbstractFileByPath(path);
+    this.markSelfWrite(path);
+    if (file instanceof TFile) {
+      await this.app.vault.process(file, (c) => writeGoalsFile(c, goals));
+    } else {
+      await this.app.vault.create(path, writeGoalsFile("", goals));
+    }
+    this.setGoalsTsFromCloud(ts);
+  }
+
+  private makeSnapshot(payload: SyncPayload): CloudSnapshot {
+    return {
+      schema: 1,
+      updatedAt: Date.now(),
+      deviceId: this.syncMeta.deviceId,
+      days: payload.days,
+      dayTs: payload.dayTs,
+      goals: payload.goals,
+      goalsTs: payload.goalsTs,
+    };
+  }
+
+  private refreshAllViews() {
+    for (const leaf of this.app.workspace.getLeavesOfType(VIEW_TYPE)) {
+      const v = leaf.view;
+      if (v instanceof TimeblockView) void v.reloadAll();
+    }
+  }
+
+  /** 双向同步主流程：拉取较新的、推送本地较新的、写回云端、刷新视图 */
+  async syncNow(manual = false): Promise<void> {
+    if (!this.syncConfigured) {
+      if (manual) new Notice("请先在设置里启用双端同步，并填写 Token 与 Gist ID");
+      return;
+    }
+    if (this.syncInFlight) {
+      this.syncQueued = true;
+      return;
+    }
+    this.syncInFlight = true;
+    this.setSyncStatus("同步中…");
+    try {
+      const cloud = await this.readCloud();
+      const remote: SyncPayload = cloud ?? { days: {}, dayTs: {}, goals: [], goalsTs: 0 };
+      const local = await this.collectLocal();
+      const report = mergeSyncPayloads(local, remote, this.syncMeta.lastSyncAt);
+
+      for (const k of report.pulledDays) {
+        await this.writeDayToDisk(k, report.merged.days[k], report.merged.dayTs[k]);
+      }
+      if (report.goalsFromCloud) {
+        await this.writeGoalsToDisk(report.merged.goals, report.merged.goalsTs);
+      }
+      if (report.changed || !cloud) {
+        await this.writeCloud(this.makeSnapshot(report.merged));
+      }
+
+      this.syncMeta.dayTs = { ...report.merged.dayTs };
+      this.syncMeta.goalsTs = report.merged.goalsTs;
+      this.syncMeta.lastSyncAt = Date.now();
+      await this.saveSettings();
+      this.refreshAllViews();
+
+      const parts: string[] = [];
+      if (report.pulledDays.length) parts.push(`拉取 ${report.pulledDays.length} 天`);
+      if (report.pushedDays.length) parts.push(`推送 ${report.pushedDays.length} 天`);
+      if (report.goalsFromCloud) parts.push("拉取目标库");
+      const summary = parts.length ? parts.join("、") : "已是最新";
+      this.setSyncStatus(`${summary} · ${new Date().toLocaleTimeString()}`);
+      if (manual) new Notice(`同步完成：${summary}`);
+      if (report.conflictDays.length || report.goalsConflict) {
+        new Notice(
+          `检测到两端同时修改（${report.conflictDays.join("、") || "目标库"}），已保留最后保存的版本`,
+          8000
+        );
+      }
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e);
+      this.setSyncStatus(`同步失败：${msg}`);
+      if (manual) new Notice(`同步失败：${msg}`, 8000);
+    } finally {
+      this.syncInFlight = false;
+      if (this.syncQueued) {
+        this.syncQueued = false;
+        this.scheduleSync(1000);
+      }
+    }
+  }
+
+  /** 首次配置 / 冲突兜底：强制用云端覆盖本地 */
+  async forcePull(): Promise<void> {
+    if (!this.syncConfigured) throw new Error("请先填写 Token 与 Gist ID 并启用同步");
+    const cloud = await this.readCloud();
+    if (!cloud) throw new Error("云端还没有同步数据");
+    for (const [k, blocks] of Object.entries(cloud.days)) {
+      await this.writeDayToDisk(k, blocks, cloud.dayTs[k] ?? 0);
+    }
+    await this.writeGoalsToDisk(cloud.goals ?? [], cloud.goalsTs ?? 0);
+    this.syncMeta.dayTs = { ...cloud.dayTs };
+    this.syncMeta.goalsTs = cloud.goalsTs ?? 0;
+    this.syncMeta.lastSyncAt = Date.now();
+    await this.saveSettings();
+    this.refreshAllViews();
+    this.setSyncStatus(`已从云端恢复 · ${new Date().toLocaleTimeString()}`);
+  }
+
+  /** 首次配置 / 冲突兜底：强制用本地覆盖云端 */
+  async forcePush(): Promise<void> {
+    if (!this.syncConfigured) throw new Error("请先填写 Token 与 Gist ID 并启用同步");
+    const local = await this.collectLocal();
+    await this.writeCloud(this.makeSnapshot(local));
+    this.syncMeta.dayTs = { ...local.dayTs };
+    this.syncMeta.goalsTs = local.goalsTs;
+    this.syncMeta.lastSyncAt = Date.now();
+    await this.saveSettings();
+    this.setSyncStatus(`已上传本地数据 · ${new Date().toLocaleTimeString()}`);
+  }
+
+  /** 同步服务产生的冲突副本提醒（只提示，绝不自动删除用户文件） */
+  private checkConflictCopies() {
+    const folder = this.settings.scheduleFolder;
+    const bad = this.app.vault
+      .getMarkdownFiles()
+      .filter(
+        (f) =>
+          f.parent &&
+          f.parent.path === folder &&
+          /conflict|conflicted copy|冲突/i.test(f.basename)
+      );
+    if (bad.length) {
+      new Notice(
+        `检测到 ${bad.length} 个同步冲突副本（如 ${bad[0].basename}），请手动合并后删除`,
+        10000
+      );
+    }
   }
 }
 
@@ -2001,7 +2443,7 @@ class TimeblockSettingTab extends PluginSettingTab {
     containerEl.empty();
     new Setting(containerEl).setName("时间块规划师").setHeading();
     containerEl.createEl("p", {
-      text: "时间块保存在 Markdown 日笔记中，目标保存在目标库笔记中，完全可用其他工具同步。",
+      text: "时间块保存在 Markdown 日笔记中，目标保存在目标库笔记中。开启下方双端同步后，数据会通过你自己的私有 Gist 在手机与电脑之间自动同步。",
     });
 
     new Setting(containerEl)
@@ -2062,5 +2504,106 @@ class TimeblockSettingTab extends PluginSettingTab {
           await this.plugin.saveSettings();
         });
       });
+
+    /* ---------- 双端同步 ---------- */
+
+    new Setting(containerEl).setName("双端同步（GitHub Gist）").setHeading();
+    containerEl.createEl("p", {
+      text: "插件默认只读写本机库里的 Markdown。开启后，计划会通过你自己的私有 Gist 在手机与电脑间双向同步，不要求两端是同一个库。两端填同一份 Token 与 Gist ID 即可；Token 仅保存在本机插件设置中。",
+    });
+    const statusEl = containerEl.createDiv("tbp-sync-status");
+    statusEl.setText(this.plugin.syncStatusText);
+    this.plugin.onSyncStatusChanged = () => statusEl.setText(this.plugin.syncStatusText);
+
+    new Setting(containerEl)
+      .setName("启用双端同步")
+      .setDesc("填好下面的 Token 与 Gist ID 后打开")
+      .addToggle((t) =>
+        t.setValue(this.plugin.settings.syncEnabled).onChange(async (v) => {
+          this.plugin.settings.syncEnabled = v;
+          await this.plugin.saveSettings();
+          if (v && this.plugin.settings.autoSync) this.plugin.scheduleSync(1000);
+        })
+      );
+
+    new Setting(containerEl)
+      .setName("自动同步")
+      .setDesc("编辑后自动推送、每 60 秒拉取一次、App 回到前台时拉取")
+      .addToggle((t) =>
+        t.setValue(this.plugin.settings.autoSync).onChange(async (v) => {
+          this.plugin.settings.autoSync = v;
+          await this.plugin.saveSettings();
+        })
+      );
+
+    new Setting(containerEl)
+      .setName("GitHub Token")
+      .setDesc("仅需 gist 权限的 Personal Access Token（classic 勾 gist / fine-grained 给 Gists 读写）")
+      .addText((t) => {
+        t.inputEl.type = "password";
+        t.inputEl.placeholder = "ghp_… 或 github_pat_…";
+        t.setValue(this.plugin.settings.gistToken).onChange(async (v) => {
+          this.plugin.settings.gistToken = v.trim();
+          await this.plugin.saveSettings();
+        });
+      });
+
+    new Setting(containerEl)
+      .setName("Gist ID")
+      .setDesc("两端必须填同一个；没有就点下面的「创建新的同步 Gist」")
+      .addText((t) =>
+        t.setValue(this.plugin.settings.gistId).onChange(async (v) => {
+          this.plugin.settings.gistId = v.trim();
+          await this.plugin.saveSettings();
+        })
+      );
+
+    new Setting(containerEl)
+      .setName("创建新的同步 Gist")
+      .setDesc("用上面的 Token 自动建一个私有 Gist 并填好 ID")
+      .addButton((b) =>
+        b.setButtonText("创建").onClick(async () => {
+          try {
+            const id = await this.plugin.createGist();
+            new Notice(`已创建同步 Gist：${id}`);
+            this.display();
+          } catch (e) {
+            new Notice(`创建失败：${e instanceof Error ? e.message : String(e)}`, 8000);
+          }
+        })
+      );
+
+    new Setting(containerEl)
+      .setName("立即同步")
+      .setDesc("也可在命令面板搜「立即同步（双端）」")
+      .addButton((b) =>
+        b.setButtonText("立即同步").setCta().onClick(() => this.plugin.syncNow(true))
+      );
+
+    new Setting(containerEl)
+      .setName("首次配置 / 冲突兜底")
+      .setDesc("两端数据不一致时：在数据最全的一端「上传覆盖云端」，另一端「从云端恢复」")
+      .addButton((b) =>
+        b.setButtonText("上传覆盖云端").onClick(async () => {
+          try {
+            await this.plugin.forcePush();
+            new Notice("已用本地数据覆盖云端");
+            this.display();
+          } catch (e) {
+            new Notice(`上传失败：${e instanceof Error ? e.message : String(e)}`, 8000);
+          }
+        })
+      )
+      .addButton((b) =>
+        b.setButtonText("从云端恢复").onClick(async () => {
+          try {
+            await this.plugin.forcePull();
+            new Notice("已用云端数据覆盖本地");
+            this.display();
+          } catch (e) {
+            new Notice(`恢复失败：${e instanceof Error ? e.message : String(e)}`, 8000);
+          }
+        })
+      );
   }
 }
